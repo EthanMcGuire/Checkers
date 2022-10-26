@@ -5,6 +5,9 @@
         "array": "cpp",
         "unordered_map": "cpp",
         "string_view": "cpp",
-        "string": "cpp"
+        "string": "cpp",
+        "xstring": "cpp",
+        "xtree": "cpp",
+        "xutility": "cpp"
     }
 }
