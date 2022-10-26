@@ -8,17 +8,18 @@
 
 #include "checkers.hh"
 
+//Constructor
 //Initializer
 //Param:
 //texture - The texture for this piece
+//textureKing - The texture for this pieces king
 //pieceColor - "black" or "white"
 //pieceDir - "down" or "up"
-//width - width in pixels of this piece
-//height - height in pixels of this piece
-bool stone::load( sf::Texture& texture, std::string pieceColor, std::string pieceDir, unsigned int width, unsigned int height )
+bool stone::load( sf::Texture& texture, sf::Texture* textureKing, std::string pieceColor, std::string pieceDir )
 {
-   //Get the texture
-   m_texture = texture;
+   //Get the textures
+   setTexture( texture );
+   kingTexture = textureKing;
 
    //Set the piece color
    color = pieceColor;
@@ -26,8 +27,8 @@ bool stone::load( sf::Texture& texture, std::string pieceColor, std::string piec
    //Set the movement direction
    moveDir = pieceDir;
 
-   // resize the vertex array to fit the level size
-   m_vertices.setPrimitiveType( sf::Quads);
+   //Resize the vertex array to fit a rectangular image
+   m_vertices.setPrimitiveType( sf::Quads );
    m_vertices.resize( 4 );
 
    //Define its 4 corners
@@ -58,6 +59,10 @@ void stone::setBoardPosition( unsigned int x, unsigned int y )
    boardY = y;
 
    setPosition( BOARD_ORIGIN_X + BOARD_SQUARE_OFFSET + PIECE_OFFSET + boardX * BOARD_SQUARE_SIZE, BOARD_ORIGIN_Y + BOARD_SQUARE_OFFSET + PIECE_OFFSET + boardY * BOARD_SQUARE_SIZE );
+
+   tryToBecomeKing( boardY );
+
+   return;
 }
 
 //Shifts this pieces position relative to their current board position
@@ -70,6 +75,40 @@ void stone::shiftPosition( unsigned int x, unsigned int y )
    boardY += y;
 
    setPosition( BOARD_ORIGIN_X + BOARD_SQUARE_OFFSET + PIECE_OFFSET + boardX * BOARD_SQUARE_SIZE, BOARD_ORIGIN_Y + BOARD_SQUARE_OFFSET + PIECE_OFFSET + boardY * BOARD_SQUARE_SIZE );
+
+   tryToBecomeKing( boardY );
+   
+   return;
+}
+
+//Sets this piece to a king, if not already a king
+//Param:
+//y - y position on the board
+void stone::tryToBecomeKing( unsigned int y )
+{
+   if ( !king )
+   {
+      if ( moveDir == "up" )
+      {
+         if ( y == BOARD_RANGE_LOW )
+         {
+            king = true;
+         }
+      }
+      else
+      {
+         if ( y == BOARD_RANGE_HIGH )
+         {
+            king = true;
+         }
+      }
+      
+      //Set the texture to be a king
+      if ( king )
+      {
+         setTexture( *kingTexture );
+      }
+   }
 }
 
 ///Checks
@@ -161,4 +200,18 @@ void stone::draw( sf::RenderTarget& target, sf::RenderStates states ) const
 
    //Draw the vertex array
    target.draw(m_vertices, states);
+
+   return;
+}
+
+///Setters
+
+//Sets the texture of this piece
+//Param:
+//texture - The texture for this piece
+void stone::setTexture( sf::Texture& texture )
+{
+   m_texture = texture;
+
+   return;
 }

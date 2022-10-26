@@ -22,9 +22,8 @@ int main()
 
    //Graphical
    sf::Texture boardTexture;
-   sf::Texture blackStoneTexture;
-   sf::Texture whiteStoneTexture;
-   sf::RectangleShape movementSquare;  //For piece movement
+   sf::Texture blackStoneTexture, blackKingTexture;
+   sf::Texture whiteStoneTexture, whiteKingTexture;
    sf::Sprite killHighlight;  //Highlight on pieces to kill
    sf::Sprite pieceHighlight; //Highlight on a currently selected piece
    sf::Sprite moveHighlight; //Highlight for a pieces movement
@@ -42,7 +41,7 @@ int main()
    unsigned int movePointCount[MAX_POSSIBLE_MOVES];   //The number of points within a move
    unsigned int moveCount;
 
-   int i, j;
+   int i, j, k;
 
    //Create the window
    window.create( sf::VideoMode(1280, 720), "Checkers" );   //1280p window
@@ -67,15 +66,17 @@ int main()
    if ( !whiteStoneTexture.loadFromFile( SPR_WHITE_PIECE ) )
       return EXIT_FAILURE;
 
+   if ( !blackKingTexture.loadFromFile( SPR_BLACK_KING ) )
+   return EXIT_FAILURE;
+
+   if ( !whiteKingTexture.loadFromFile( SPR_WHITE_KING ) )
+      return EXIT_FAILURE;
+
+
    //Get the checkers board sprite
    sf::Sprite boardSprite( boardTexture ); //592 by 592
 
    boardSprite.setPosition( BOARD_ORIGIN_X, BOARD_ORIGIN_Y ); //Center the checkers board
-
-   //Set up the end of move highlight
-   movementSquare.setSize( sf::Vector2f( BOARD_SQUARE_SIZE, BOARD_SQUARE_SIZE ) );
-   movementSquare.setFillColor( sf::Color( 255, 255, 0, 128 ) );  //50% opacity yellow
-   movementSquare.setOutlineColor( sf::Color( 255, 255, 0, 128 ) );  //50% opacity yellow
 
    //Set up piece move highlight
    moveHighlight.setTexture( whiteStoneTexture );
@@ -99,7 +100,7 @@ int main()
          //Create the black pieces
 
          //Load black piece texture
-         if ( !black[j][i].load( blackStoneTexture, "black", "down", PIECE_SIZE, PIECE_SIZE ) )
+         if ( !black[j][i].load( blackStoneTexture, &blackKingTexture, "black", "down" ) )
             return EXIT_FAILURE;
 
          black[j][i].setBoardPosition( offset + j * 2, i ); //Set the black positions
@@ -107,7 +108,7 @@ int main()
          //Create the white pieces
          
          //Load white piece texture
-         if ( !white[j][i].load( whiteStoneTexture, "white", "up", PIECE_SIZE, PIECE_SIZE ) )
+         if ( !white[j][i].load( whiteStoneTexture, &whiteKingTexture, "white", "up" ) )
             return EXIT_FAILURE;
 
          white[j][i].setBoardPosition( !offset + j * 2, WHITE_PLAYER_ROW_OFFSET + i ); //Set the white positions
@@ -161,11 +162,28 @@ int main()
                   //Is a move hovered over?
                   if ( mouseMoveIndex != -1 )
                   {
+                     //START THE ACTION
+                     //executingAction = true;
+                     //Check if this is a kill move
+                     //If so, get the piece to kill from position[index][0]
+                     //goalX = getX;
+                     //goalY = getY;
+                     //Progress towards the goalX and goalY until the move is complete
+                     //Once the action is complete:
+                        //If kill move, kill the piece then check for kill chains
+                           //Set selected to true when kill chains are available
+                              //Also fill the arrays
+                           //If no kills chains, end the ACTION
+                        //Otherwise, end the ACTION
+
                      //Move the currently selected piece
                      selectedPiece -> setBoardPosition( movePositions[mouseMoveIndex][movePointCount[mouseMoveIndex] - 1].x, movePositions[mouseMoveIndex][movePointCount[mouseMoveIndex] - 1].y );
 
-                     selected = false;
-                     selectedPiece = nullptr;
+                     //No longer do this
+                     selected = false; //This WILL be false
+                     selectedPiece = nullptr;   //BUT this WILL point to our piece
+
+
                      actionComplete = true;
                   }
                }
@@ -189,6 +207,7 @@ int main()
                            //Set the piece highlight on the current pieces location
                            pieceHighlight.setPosition( selectedPiece -> getPosition() );
 
+                           mouseMoveIndex = -1; //Reset the mouseMoveIndex
                            actionComplete = true;
                         }
 
@@ -204,6 +223,7 @@ int main()
                            //Set the piece highlight on the current pieces location
                            pieceHighlight.setPosition( selectedPiece -> getPosition() );
 
+                           mouseMoveIndex = -1; //Reset the mouseMoveIndex
                            actionComplete = true;
                         }
                      }
@@ -215,6 +235,7 @@ int main()
                {
                   selected = false;
                   selectedPiece = nullptr;
+                  mouseMoveIndex = -1; //Reset the mouseMoveIndex
                }
             }
          }
@@ -248,35 +269,71 @@ int main()
       //Draw the possible move positions and piece highlights
       if ( selected )
       {
-         for ( int i = 0 ; i < moveCount ; i++ )
+         for ( int i = 0 ; i <= BOARD_RANGE_HIGH ; i++ )
          {
-            for ( int j = 0 ; j < movePointCount[i] ; j++ )
+            for ( int j = 0 ; j <= BOARD_RANGE_HIGH ; j++ )
             {
-               //Get the position for this point
-               unsigned int xPos = movePositions[i][j].x;
-               unsigned int yPos = movePositions[i][j].y;
-               int xReal = BOARD_ORIGIN_X + BOARD_SQUARE_OFFSET + ( BOARD_SQUARE_SIZE * xPos );
-               int yReal = BOARD_ORIGIN_Y + BOARD_SQUARE_OFFSET + ( BOARD_SQUARE_SIZE * yPos );
+               //If there is a move point at this board point
+               if ( moveCountMatrix[i][j] > 0 )
+               {
+                  //Get the position for this point
+                  unsigned int xPos = i;
+                  unsigned int yPos = j;
+                  int xReal, yReal;
+                  int opacity;
+                  bool highlighted = false;
 
-               //Draw
-               if ( !isPositionFree( xPos, yPos, black, white ) )
-               {
-                  //Draw the kill highlight
-                  killHighlight.setPosition( xReal + PIECE_OFFSET, yReal + PIECE_OFFSET );
-                  window.draw( killHighlight );
-               }
-               else
-               {
-                  //Piece movement
-                  if ( j == movePointCount[i] - 1 )
+                  xReal = BOARD_ORIGIN_X + BOARD_SQUARE_OFFSET + ( BOARD_SQUARE_SIZE * xPos );
+                  yReal = BOARD_ORIGIN_Y + BOARD_SQUARE_OFFSET + ( BOARD_SQUARE_SIZE * yPos );
+
+                  //Check if this point is highlighted by the mouse
+                  if ( mouseMoveIndex != -1 )
                   {
-                     //Draw the end move square highlight
-                     movementSquare.setPosition( xReal, yReal );
-                     window.draw( movementSquare );
+                     for ( k = 0 ; k < movePointCount[mouseMoveIndex] ; k++ )
+                     {
+                        if ( movePositions[mouseMoveIndex][k].x == xPos && movePositions[mouseMoveIndex][k].y == yPos )
+                        {
+                           //The highlighted move contains this point
+                           highlighted = true;
+                           break;
+                        }
+                     }
+                  }
+
+                  //Draw
+                  if ( !isPositionFree( xPos, yPos, black, white ) )
+                  {
+                     //Kill highlight
+
+                     //Set color opacity
+                     opacity = 128;
+
+                     if ( highlighted )
+                     {
+                        opacity = 192;
+                     }
+
+                     killHighlight.setColor( sf::Color( 255, 0, 0, opacity ) );   //Red
+
+                     //Draw the kill highlight
+                     killHighlight.setPosition( xReal + PIECE_OFFSET, yReal + PIECE_OFFSET );
+                     window.draw( killHighlight );
                   }
                   else
                   {
                      //Piece movement highlight
+
+                     //Set color opacity
+                     opacity = 64;
+                  
+                     if ( highlighted )
+                     {
+                        opacity = 128;
+                     }
+
+                     moveHighlight.setColor( sf::Color( 255, 255, 0, opacity ) );  //Yellow
+
+                     //Draw the piece movement highlight
                      moveHighlight.setPosition( xReal + PIECE_OFFSET, yReal + PIECE_OFFSET );
                      window.draw( moveHighlight );
                   }
@@ -425,7 +482,7 @@ unsigned int getMovePositions(
    //Check for kill moves, and if so remove any other moves
    if ( count != 0 )
    { 
-     bool found = false;
+      bool found = false;
       int i, j, k;
 
       //Check if any kill moves were found
@@ -443,7 +500,9 @@ unsigned int getMovePositions(
       if ( found )
       {
          //Remove any non-kill moves (Since kills are forced)
-         for ( i = 0 ; i < index ; i++ )
+         i = 0;
+
+         while ( i < count )
          {
             if ( movePointCount[i] == 1 )
             {
@@ -458,6 +517,11 @@ unsigned int getMovePositions(
                }
 
                count--;
+            }
+            else
+            {
+               //Only increment i when a move isn't removed (Since we would then skip moves)
+               i++;
             }
          }
       }
@@ -504,8 +568,22 @@ unsigned int confirmPosition(
             //Check if the intruding piece is killable
             if ( isKillablePiece( piece, black, white, x, y, xChange, yChange ) )
             {
-                  //Get the kill move to kill this piece
-                  return getKillMove( positions, movePointCount, piece, black, white, index, x + xChange, y + yChange, xChange, yChange, 0 );
+                  //Get the move to kill this piece
+
+                  //Get the position of the enemy to kill
+                  positions[index][0].x = x;
+                  positions[index][0].y = y;
+
+                  //Get the position after the kill
+                  positions[index][1].x = x + xChange;
+                  positions[index][1].y = y + yChange;
+
+                  //2 points in a kill move
+                  movePointCount[index] = 2;
+
+                  return 1;
+                  
+                  //return getKillMove( positions, movePointCount, piece, black, white, index, x + xChange, y + yChange, xChange, yChange, 0 );
             }
 
             //Otherwise no valid move
@@ -569,6 +647,11 @@ unsigned int getKillMove(
    //Get the number of points in this kill move
    movePointCount[currentIndex] = currentPointIndex + 1;
 
+   //No longer searching for key chains here
+   //Just return the current kill
+   //Kill chains will be searched for after each kill
+
+   /*
    //Make a kill path backup
    for ( int i = 0 ; i <= currentPointIndex ; i++ )
    {
@@ -669,6 +752,7 @@ unsigned int getKillMove(
             }
          }
    }
+   */
 
    //If no kill was found, this is the end of this kill chain
    if ( !killFound )
@@ -826,5 +910,7 @@ void setMovementRectPositions(
 
       movementSquares[i].setPosition( xPos, yPos );
    }
+
+   return;
 }
 */

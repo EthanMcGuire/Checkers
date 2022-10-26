@@ -26,6 +26,8 @@ const std::string SND_MUSIC = "Audio\\DanseMacabre.ogg";
 const std::string SPR_BOARD = "Sprites\\CheckersBoard.png";
 const std::string SPR_BLACK_PIECE = "Sprites\\CheckersBlack.png";
 const std::string SPR_WHITE_PIECE = "Sprites\\CheckersWhite.png";
+const std::string SPR_BLACK_KING = "Sprites\\CheckersBlack.png";
+const std::string SPR_WHITE_KING = "Sprites\\CheckersWhite.png";
 
 #ifndef CHECKERS_H
 #define CHECKERS_H
@@ -40,8 +42,9 @@ struct point
 class stone : public sf::Drawable, public sf::Transformable
 {
    public:
-    
-      bool load( sf::Texture& texture, std::string pieceColor, std::string pieceDir, unsigned int width, unsigned int height );
+
+      //Load values (like a constructor)    
+      bool load( sf::Texture& texture, sf::Texture* textureKing, std::string pieceColor, std::string pieceDir );
 
       ///Methods/Actions
 
@@ -52,6 +55,11 @@ class stone : public sf::Drawable, public sf::Transformable
 
       //Shifts this pieces position relative to their current board position
       void shiftPosition( unsigned int x, unsigned int y );
+
+      //Sets this piece to a king
+      //Param:
+      //y - y position on the board
+      void tryToBecomeKing( unsigned int y );
 
       ///Checks
 
@@ -85,6 +93,11 @@ class stone : public sf::Drawable, public sf::Transformable
       //"down" or "up"
       std::string getMoveDir();
 
+      ///Setters
+
+      //Set the texture for this piece
+      void setTexture( sf::Texture& texture );
+
    private:
    bool alive = true;
       bool king = false;
@@ -98,6 +111,7 @@ class stone : public sf::Drawable, public sf::Transformable
 
       sf::VertexArray m_vertices;
       sf::Texture m_texture;
+      sf::Texture* kingTexture;
 
    virtual void draw( sf::RenderTarget& target, sf::RenderStates states ) const;
 };
