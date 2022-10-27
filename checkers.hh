@@ -18,8 +18,9 @@ const int ROW_SIZE = 4;  //4 pieces started in a row
 const int COLUMN_SIZE = 3;   //3 pieces started in a column (per player)
 const int BOARD_RANGE_LOW = 0;   //The low and high range of squares on the board
 const int BOARD_RANGE_HIGH = 7;
-const int MAX_POSSIBLE_MOVES = 20;   //Max 20 possible moves for a single checkers piece
-const int MAX_MOVE_POINTS = 24;  //24 possible points in 1 moves (if you SOMEHOW kill all 12 pieces)
+const int MAX_POSSIBLE_MOVES = 4;   //Max 4 possible moves for a single checkers piece
+const int MAX_MOVE_POINTS = 2;  //2 possible points in 1 moves (killing a piece is 2 points)
+const int PIECE_MOVE_SPEED = 5;  //The speed pieces move
 
 //Files
 const std::string SND_MUSIC = "Audio\\DanseMacabre.ogg";
@@ -32,10 +33,12 @@ const std::string SPR_WHITE_KING = "Sprites\\CheckersWhite.png";
 #ifndef CHECKERS_H
 #define CHECKERS_H
 
-//Define a x, y point
-struct point
+//States
+enum states
 {
-   int x, y;
+   getAction,  //Get an action
+   getChainKill,  //Get the next piece to kill in a kill chain
+   action   //Executing an action
 };
 
 //Define the stone class (checkers pieces)
@@ -56,10 +59,17 @@ class stone : public sf::Drawable, public sf::Transformable
       //Shifts this pieces position relative to their current board position
       void shiftPosition( unsigned int x, unsigned int y );
 
+      //Moves this piece towards point by speed
+      //Returns true once the point is reached
+      bool moveTowardsPoint( sf::Vector2f point, float speed, float deltaTime );
+
       //Sets this piece to a king
       //Param:
       //y - y position on the board
       void tryToBecomeKing( unsigned int y );
+
+      //Kills this piece
+      void kill();
 
       ///Checks
 
@@ -117,33 +127,32 @@ class stone : public sf::Drawable, public sf::Transformable
 };
 
 bool inRange( unsigned int value, unsigned int low, unsigned int high );
+sf::Vector2f interpolate( sf::Vector2f pointA, sf::Vector2f pointB, float speed );
+
 bool isPositionFree( unsigned int x, unsigned int y, stone black[ROW_SIZE][COLUMN_SIZE], stone white[ROW_SIZE][COLUMN_SIZE] );
 stone* getStoneFromPosition( unsigned int x, unsigned int y, stone black[ROW_SIZE][COLUMN_SIZE], stone white[ROW_SIZE][COLUMN_SIZE] );
 
 unsigned int getMovePositions( 
-   point positions[MAX_POSSIBLE_MOVES][MAX_MOVE_POINTS], 
+   sf::Vector2i positions[MAX_POSSIBLE_MOVES][MAX_MOVE_POINTS], 
    unsigned int movePointCount[MAX_POSSIBLE_MOVES], 
    stone piece, stone black[ROW_SIZE][COLUMN_SIZE], stone white[ROW_SIZE][COLUMN_SIZE] );
 
 unsigned int confirmPosition( 
-   point positions[MAX_POSSIBLE_MOVES][MAX_MOVE_POINTS],
+   sf::Vector2i positions[MAX_POSSIBLE_MOVES][MAX_MOVE_POINTS],
    unsigned int movePointCount[MAX_POSSIBLE_MOVES], 
    stone piece, stone black[ROW_SIZE][COLUMN_SIZE], stone white[ROW_SIZE][COLUMN_SIZE], 
    unsigned int index, 
    unsigned int x, unsigned int y, 
    unsigned int xChange, unsigned int yChange );
 
-unsigned int getKillMove( 
-   point positions[MAX_POSSIBLE_MOVES][MAX_MOVE_POINTS], 
+unsigned int getKillMoves( 
+   sf::Vector2i positions[MAX_POSSIBLE_MOVES][MAX_MOVE_POINTS], 
    unsigned int movePointCount[MAX_POSSIBLE_MOVES],
    stone piece, stone black[ROW_SIZE][COLUMN_SIZE], stone white[ROW_SIZE][COLUMN_SIZE], 
-   unsigned int index, 
-   unsigned int x, unsigned int y, 
-   unsigned int preKillDirX, unsigned int preKillDirY,
-   unsigned int pointIndex );
+   unsigned int x, unsigned int y );
 
 void getTotalMovesPerPoint( 
-   point positions[MAX_POSSIBLE_MOVES][MAX_MOVE_POINTS], 
+   sf::Vector2i positions[MAX_POSSIBLE_MOVES][MAX_MOVE_POINTS], 
    unsigned int movePointCount[MAX_POSSIBLE_MOVES], 
    unsigned int moveCountMatrix[BOARD_RANGE_HIGH + 1][BOARD_RANGE_HIGH + 1],
    unsigned int moveCount );
@@ -154,18 +163,10 @@ bool isKillablePiece(
    unsigned int xChange, unsigned int yChange );
 
 unsigned int checkMouseOverMove( 
-   point positions[MAX_POSSIBLE_MOVES][MAX_MOVE_POINTS], 
+   sf::Vector2i positions[MAX_POSSIBLE_MOVES][MAX_MOVE_POINTS], 
    unsigned int movePointCount[MAX_POSSIBLE_MOVES], 
    unsigned int moveCountMatrix[BOARD_RANGE_HIGH + 1][BOARD_RANGE_HIGH + 1],
    unsigned int moveCount,
    int mouseX, int mouseY );
-
-/*
-void setMovementRectPositions( 
-   point positions[MAX_POSSIBLE_MOVES][MAX_MOVE_POINTS],
-   unsigned int movePointCount[MAX_POSSIBLE_MOVES],
-   sf::RectangleShape movementSquares[MAX_POSSIBLE_MOVES], 
-   unsigned int moveCount );
-   */
 
 #endif

@@ -4,7 +4,10 @@
 #include <SFML/Audio.hpp>
 #include <SFML/Network.hpp>
 
+#include <iostream>
 #include <string>
+#include <algorithm>
+#include <cmath>
 
 #include "checkers.hh"
 
@@ -81,6 +84,34 @@ void stone::shiftPosition( unsigned int x, unsigned int y )
    return;
 }
 
+//Moves this piece towards point by speed
+//Returns true once the point is reached
+//Param:
+//point - The x and y point to move to
+//speed - The speed to move towards the point
+//deltaTime - The time passed
+bool stone::moveTowardsPoint( sf::Vector2f point, float speed, float deltaTime )
+{
+   //Move towards point
+   sf::Vector2f moveAmount = interpolate( getPosition(), point, speed ) * ( deltaTime * 60 );
+
+   setPosition( getPosition() + ( moveAmount ) );
+
+   //Check if the point was reached
+   sf::Vector2f distCheck = getPosition() - point;
+   distCheck.x = std::abs( distCheck.x );
+   distCheck.y = std::abs( distCheck.y );
+
+   if ( distCheck.x < speed && distCheck.y < speed )
+   {  
+      setPosition( point );
+
+      return true;
+   }
+
+   return false;
+}
+
 //Sets this piece to a king, if not already a king
 //Param:
 //y - y position on the board
@@ -109,6 +140,14 @@ void stone::tryToBecomeKing( unsigned int y )
          setTexture( *kingTexture );
       }
    }
+}
+
+//Kills this piece
+void stone::kill()
+{
+   alive = false;
+
+   //Remove from the piece array?
 }
 
 ///Checks

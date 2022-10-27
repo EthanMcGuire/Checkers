@@ -4,10 +4,13 @@
 #include <SFML/Audio.hpp>
 #include <SFML/Network.hpp>
 
+#include <iostream>
 #include <string>
+#include <math.h>
 
 #include "checkers.hh"
 
+//-mwindows
 //ming32-make to compile and link the program
 
 int main()
@@ -32,15 +35,30 @@ int main()
    stone black[ROW_SIZE][COLUMN_SIZE];
    stone white[ROW_SIZE][COLUMN_SIZE];
 
+   //Move selection
    bool selected = false;  //True when a piece is pressed on
    stone* selectedPiece;   //Reference to the currently selected piece
    unsigned int mouseMoveIndex;  //The movePositions index the mouse is highlighted over
 
-   point movePositions[MAX_POSSIBLE_MOVES][MAX_MOVE_POINTS];   //The coordinates on the board where this piece can move
-   unsigned int moveCountMatrix[BOARD_RANGE_HIGH + 1][BOARD_RANGE_HIGH + 1];   //The number of moves at each point on the board
+   //Move info
+   sf::Vector2i movePositions[MAX_POSSIBLE_MOVES][MAX_MOVE_POINTS];   //The coordinates on the board where this piece can move
    unsigned int movePointCount[MAX_POSSIBLE_MOVES];   //The number of points within a move
-   unsigned int moveCount;
+   unsigned int moveCountMatrix[BOARD_RANGE_HIGH + 1][BOARD_RANGE_HIGH + 1];   //The number of moves at each point on the board
+   unsigned int moveCount; //Total moves found for a piece
 
+   //Action Control
+   bool executingAction = false; //Whether an action is currently being executed (e.g. piece move)
+   bool killAction = false;   //Whether the current action is a kill move
+   unsigned int moveIndex; //The movePositions index that is being executed
+   sf::Vector2f actionPointGoal;  //The x and y point where the piece will land after their action
+   stone* pieceToKill;  //The piece to kill for a kill move
+
+   //Game timing control
+   sf::Clock deltaClock;
+   float deltaTime = 0;
+
+   //Other
+   states state = getAction;
    int i, j, k;
 
    //Create the window
@@ -120,6 +138,13 @@ int main()
    //Start the game loop
    while ( window.isOpen() )
    {
+      //Get delta time
+      deltaTime = deltaClock.restart().asSeconds();
+
+      //Get the mouse position
+      auto mousePos = sf::Mouse::getPosition( window );
+      auto mousePosWorld = window.mapPixelToCoords( mousePos );
+
       sf::Event event;
 
       while ( window.pollEvent( event ) )
@@ -130,121 +155,186 @@ int main()
             window.close();
          }
 
-         //Mouse moved
-         if ( event.type == sf::Event::MouseMoved )
+         if ( state == getAction || state == getChainKill )
          {
-            //Check if the mouse is over a move
-            if ( selected )
+            //Mouse moved
+            if ( event.type == sf::Event::MouseMoved )
             {
-               //Get the mouse position
-               auto mousePos = sf::Mouse::getPosition( window );
-               auto mousePosWorld = window.mapPixelToCoords( mousePos );
-
-               //Check for mouse over move
-               mouseMoveIndex = checkMouseOverMove( movePositions, movePointCount, moveCountMatrix, moveCount, mousePosWorld.x, mousePosWorld.y );
-            }
-         }
-
-         //Mouse pressed
-         if ( event.type == sf::Event::MouseButtonPressed )
-         {
-            if ( event.mouseButton.button == sf::Mouse::Left )
-            {
-               //Get the mouse position
-               auto mousePos = sf::Mouse::getPosition( window );
-               auto mousePosWorld = window.mapPixelToCoords( mousePos );
-
-               bool actionComplete = false;
-
-               //Check for a piece move action
+               //Check if the mouse is over a move
                if ( selected )
                {
-                  //Is a move hovered over?
-                  if ( mouseMoveIndex != -1 )
-                  {
-                     //START THE ACTION
-                     //executingAction = true;
-                     //Check if this is a kill move
-                     //If so, get the piece to kill from position[index][0]
-                     //goalX = getX;
-                     //goalY = getY;
-                     //Progress towards the goalX and goalY until the move is complete
-                     //Once the action is complete:
-                        //If kill move, kill the piece then check for kill chains
-                           //Set selected to true when kill chains are available
-                              //Also fill the arrays
-                           //If no kills chains, end the ACTION
-                        //Otherwise, end the ACTION
-
-                     //Move the currently selected piece
-                     selectedPiece -> setBoardPosition( movePositions[mouseMoveIndex][movePointCount[mouseMoveIndex] - 1].x, movePositions[mouseMoveIndex][movePointCount[mouseMoveIndex] - 1].y );
-
-                     //No longer do this
-                     selected = false; //This WILL be false
-                     selectedPiece = nullptr;   //BUT this WILL point to our piece
-
-
-                     actionComplete = true;
-                  }
+                  //Check for mouse over move
+                  mouseMoveIndex = checkMouseOverMove( movePositions, movePointCount, moveCountMatrix, moveCount, mousePosWorld.x, mousePosWorld.y );
                }
+            }
 
-               //Check if pieces were pressed on
-               if ( !actionComplete )
+            //Mouse pressed
+            if ( event.type == sf::Event::MouseButtonPressed )
+            {
+               if ( event.mouseButton.button == sf::Mouse::Left )
                {
-                  for ( int i = 0 ; i < COLUMN_SIZE ; i++ )  //Rows
+                  bool actionComplete = false;
+
+                  //Check for a piece move action
+                  if ( selected )
                   {
-                     for ( int j = 0 ; j < ROW_SIZE ; j++ )  //Columns
+                     //Is a move hovered over?
+                     if ( mouseMoveIndex != -1 )
                      {
-                        //Select a black piece
-                        if ( black[j][i].meetingPoint( mousePosWorld.x, mousePosWorld.y ) )
+                        //START THE ACTION
+                        //This is executed during the getAction or getChainKill state
+
+                        state = action;
+                        moveIndex = mouseMoveIndex;
+
+                        killAction = false;
+
+                        //Is this is a kill move?
+                        if ( movePointCount[moveIndex] > 1 )
                         {
-                           //Piece selected
-                           selected = true;
-                           selectedPiece = &black[j][i];
-                           moveCount = getMovePositions( movePositions, movePointCount, *selectedPiece, black, white );  //Get the possible move count
-                           getTotalMovesPerPoint( movePositions, movePointCount, moveCountMatrix, moveCount );   //Get the total moves on each board point
+                           //First point is the enemies location
+                           pieceToKill = getStoneFromPosition( movePositions[moveIndex][0].x, movePositions[moveIndex][0].y, black, white );
 
-                           //Set the piece highlight on the current pieces location
-                           pieceHighlight.setPosition( selectedPiece -> getPosition() );
-
-                           mouseMoveIndex = -1; //Reset the mouseMoveIndex
-                           actionComplete = true;
+                           killAction = true;
                         }
 
-                        ///Select a white piece
-                        if ( white[j][i].meetingPoint( mousePosWorld.x, mousePosWorld.y ) )
-                        {
-                           //Piece selected
-                           selected = true;
-                           selectedPiece = &white[j][i];
-                           moveCount = getMovePositions( movePositions, movePointCount, *selectedPiece, black, white );  //Get the possible move count
-                           getTotalMovesPerPoint( movePositions, movePointCount, moveCountMatrix, moveCount );   //Get the total moves on each board point
+                        int xPos, yPos;
 
-                           //Set the piece highlight on the current pieces location
-                           pieceHighlight.setPosition( selectedPiece -> getPosition() );
+                        xPos = movePositions[moveIndex][movePointCount[moveIndex] - 1].x;
+                        yPos = movePositions[moveIndex][movePointCount[moveIndex] - 1].y;
 
-                           mouseMoveIndex = -1; //Reset the mouseMoveIndex
-                           actionComplete = true;
-                        }
+                        actionPointGoal.x = xPos;
+                        actionPointGoal.y = yPos;
+
+                        selected = false;
+
+                        actionComplete = true;        
                      }
                   }
-               }
 
-               //Blank space was pressed
-               if ( !actionComplete )
-               {
-                  selected = false;
-                  selectedPiece = nullptr;
-                  mouseMoveIndex = -1; //Reset the mouseMoveIndex
+                  //These are only executed during getAction state
+                  //The getChainKill state does not allow selecting another piece
+                  if ( state == getAction )
+                  {
+                     //Check if pieces were pressed on
+                     if (  !actionComplete )
+                     {
+                        for ( int i = 0 ; i < COLUMN_SIZE ; i++ )  //Rows
+                        {
+                           for ( int j = 0 ; j < ROW_SIZE ; j++ )  //Columns
+                           {
+                              //Select a black piece
+                              if ( black[j][i].meetingPoint( mousePosWorld.x, mousePosWorld.y ) )
+                              {
+                                 //Piece selected
+                                 selected = true;
+                                 selectedPiece = &black[j][i];
+                                 moveCount = getMovePositions( movePositions, movePointCount, *selectedPiece, black, white );  //Get the possible move count
+                                 getTotalMovesPerPoint( movePositions, movePointCount, moveCountMatrix, moveCount );   //Get the total moves on each board point
+
+                                 //Set the piece highlight on the current pieces location
+                                 pieceHighlight.setPosition( selectedPiece -> getPosition() );
+
+                                 //Check for mouse over move
+                                 mouseMoveIndex = checkMouseOverMove( movePositions, movePointCount, moveCountMatrix, moveCount, mousePosWorld.x, mousePosWorld.y );
+
+                                 actionComplete = true;
+                              }
+
+                              ///Select a white piece
+                              if ( white[j][i].meetingPoint( mousePosWorld.x, mousePosWorld.y ) )
+                              {
+                                 //Piece selected
+                                 selected = true;
+                                 selectedPiece = &white[j][i];
+                                 moveCount = getMovePositions( movePositions, movePointCount, *selectedPiece, black, white );  //Get the possible move count
+                                 getTotalMovesPerPoint( movePositions, movePointCount, moveCountMatrix, moveCount );   //Get the total moves on each board point
+
+                                 //Set the piece highlight on the current pieces location
+                                 pieceHighlight.setPosition( selectedPiece -> getPosition() );
+
+                                 //Check for mouse over move
+                                 mouseMoveIndex = checkMouseOverMove( movePositions, movePointCount, moveCountMatrix, moveCount, mousePosWorld.x, mousePosWorld.y );
+
+                                 actionComplete = true;
+                              }
+                           }
+                        }
+                     }
+
+                     //Blank space was pressed
+                     if ( !actionComplete )
+                     {
+                        selected = false;
+                        selectedPiece = nullptr;
+                        mouseMoveIndex = -1; //Reset the mouseMoveIndex
+                     }
+                  }
                }
             }
          }
       }
 
       //Step Actions
-      /***
-       * None yet
-      ***/
+
+      if ( state == action )
+      {
+         //Executing an action
+         
+         //Move the selected piece to the point goal
+         bool pointReached = false;
+         sf::Vector2f point(BOARD_ORIGIN_X + BOARD_SQUARE_OFFSET + PIECE_OFFSET + ( BOARD_SQUARE_SIZE * actionPointGoal.x ),
+                        BOARD_ORIGIN_Y + PIECE_OFFSET + BOARD_SQUARE_OFFSET + ( BOARD_SQUARE_SIZE * actionPointGoal.y ) );
+
+         pointReached = ( selectedPiece -> moveTowardsPoint( point, PIECE_MOVE_SPEED, deltaTime ) );
+
+         //Goal reached
+         if ( pointReached )
+         {
+            selectedPiece -> setBoardPosition( actionPointGoal.x, actionPointGoal.y );
+
+            bool killChain = false;
+
+            if ( killAction )
+            {
+               //Kill the piece
+               pieceToKill -> kill();
+
+               //Check for kill chains
+               moveCount = getKillMoves( movePositions, movePointCount, *selectedPiece, black, white, actionPointGoal.x, actionPointGoal.y );
+
+               if ( moveCount != 0 )
+               {
+                  //Set up move information
+
+                  getTotalMovesPerPoint( movePositions, movePointCount, moveCountMatrix, moveCount );   //Get the total moves on each board point
+
+                  //Set the piece highlight on the current pieces location
+                  pieceHighlight.setPosition( selectedPiece -> getPosition() );
+
+                  //Check for mouse over move
+                  mouseMoveIndex = checkMouseOverMove( movePositions, movePointCount, moveCountMatrix, moveCount, mousePosWorld.x, mousePosWorld.y );
+
+                  killChain = true;
+               }
+            }
+
+            if ( killChain )
+            {
+               //Start the getChainKill state
+
+               selected = true;
+               state = getChainKill;
+            }
+            else
+            {
+               //Return to the getAction state
+
+               selectedPiece = nullptr;
+               state = getAction;
+            }
+         }
+      }
 
       //Clear the window
       window.clear();
@@ -370,6 +460,30 @@ bool inRange( unsigned int value, unsigned int low, unsigned int high )
     return false;
 }
 
+//Returns the distance moved from pointA to pointB by speed
+//Uses normalization of points for a direction
+//Param:
+//pointA - Starting point
+//pointB - Point to move to
+//speed - Speed to move at
+sf::Vector2f interpolate( sf::Vector2f pointA, sf::Vector2f pointB, float speed )
+{
+   sf::Vector2f distance, direction, velocity;
+   float magnitude;
+
+   //Get the total distance
+   distance = pointB - pointA;
+   
+   //Normalize
+   magnitude = sqrt( pow( distance.x, 2 ) + pow( distance.y, 2 ) );
+   direction = sf::Vector2f( distance.x / magnitude, distance.y / magnitude );
+
+   //Get the movement amount
+   velocity = speed * direction;
+
+   return velocity;
+}
+
 //Returns true if this position on the board is free
 //Otherwise returns false
 //Param:
@@ -432,7 +546,7 @@ stone* getStoneFromPosition( unsigned int x, unsigned int y, stone black[ROW_SIZ
 //black - The array of black pieces
 //white - The array of white pieces
 unsigned int getMovePositions( 
-   point positions[MAX_POSSIBLE_MOVES][MAX_MOVE_POINTS], 
+   sf::Vector2i positions[MAX_POSSIBLE_MOVES][MAX_MOVE_POINTS], 
    unsigned int movePointCount[MAX_POSSIBLE_MOVES], 
    stone piece, stone black[ROW_SIZE][COLUMN_SIZE], stone white[ROW_SIZE][COLUMN_SIZE] )
 {
@@ -545,7 +659,7 @@ unsigned int getMovePositions(
 //xChange - The x direction for this move (-1, or 1 )
 //yChange - The y direction for this move (-1, or 1 )
 unsigned int confirmPosition( 
-   point positions[MAX_POSSIBLE_MOVES][MAX_MOVE_POINTS], 
+   sf::Vector2i positions[MAX_POSSIBLE_MOVES][MAX_MOVE_POINTS], 
    unsigned int movePointCount[MAX_POSSIBLE_MOVES],
    stone piece, stone black[ROW_SIZE][COLUMN_SIZE], stone white[ROW_SIZE][COLUMN_SIZE], 
    unsigned int index, 
@@ -582,8 +696,6 @@ unsigned int confirmPosition(
                   movePointCount[index] = 2;
 
                   return 1;
-                  
-                  //return getKillMove( positions, movePointCount, piece, black, white, index, x + xChange, y + yChange, xChange, yChange, 0 );
             }
 
             //Otherwise no valid move
@@ -594,30 +706,22 @@ unsigned int confirmPosition(
    }
 }
 
-//Gets all positions for a kill move (This is started with a kill move)
-//Will add whatever possible kills their are into the positions array
-//Points in a kill move are saved in movePointCount
-//This is a RECURSIVE function
-//Calls again at every kill found, attempting to find new kills or paths
+//Gets all possible kill moves from position x, y
+//Will add possible kill moves into the positions array
+//Point count in a kill move are saved in movePointCount
 //Param:
 //positions - The array of x and y positions for possible moves
 //movePointCount - The number of points in a move
 //piece - The piece to check the possible kill moves for
 //black - The array of black pieces
 //white - The array of white pieces
-//index - The current index in the positions array
 //x - Row on the board
 //y - Column on the board 
-//preKillDirX - The x direction for the previous kill (-1, or 1 )
-//preKillDirY - The x direction for the previous kill (-1, or 1 )
-unsigned int getKillMove( 
-   point positions[MAX_POSSIBLE_MOVES][MAX_MOVE_POINTS], 
+unsigned int getKillMoves( 
+   sf::Vector2i positions[MAX_POSSIBLE_MOVES][MAX_MOVE_POINTS], 
    unsigned int movePointCount[MAX_POSSIBLE_MOVES],
    stone piece, stone black[ROW_SIZE][COLUMN_SIZE], stone white[ROW_SIZE][COLUMN_SIZE], 
-   unsigned int index, 
-   unsigned int x, unsigned int y, 
-   unsigned int preKillDirX, unsigned int preKillDirY,
-   unsigned int pointIndex )
+   unsigned int x, unsigned int y )
 {
    //Get my piece information
    bool king = piece.isKing();
@@ -625,83 +729,54 @@ unsigned int getKillMove(
    unsigned int boardX = piece.getBoardXPos();
    unsigned int boardY = piece.getBoardYPos();
 
-   bool killFound = false;
-   unsigned int moveCount, moveCountAdd;
-   unsigned int currentIndex, currentPointIndex;
-   point tempPositions[MAX_MOVE_POINTS];
+   unsigned int moveCount;
+   unsigned int index, pointIndex;
 
    moveCount = 0;
-   currentIndex = index;
-   currentPointIndex = pointIndex;
-
-   //Get the position of the enemy to kill
-   positions[currentIndex][currentPointIndex].x = x - preKillDirX;
-   positions[currentIndex][currentPointIndex].y = y - preKillDirY;
-
-   currentPointIndex += 1;
-
-   //Get the position after the kill
-   positions[currentIndex][currentPointIndex].x = x;
-   positions[currentIndex][currentPointIndex].y = y;
-
-   //Get the number of points in this kill move
-   movePointCount[currentIndex] = currentPointIndex + 1;
-
-   //No longer searching for key chains here
-   //Just return the current kill
-   //Kill chains will be searched for after each kill
-
-   /*
-   //Make a kill path backup
-   for ( int i = 0 ; i <= currentPointIndex ; i++ )
-   {
-      tempPositions[i] = positions[currentIndex][i];
-   }
+   index = 0;
 
    //Check for possible kill chains
    if ( king || moveDir == "down" )
    {
          //Down left
-         //Can't kill down left if we killed up right previously
-         if ( !( preKillDirX == 1 && preKillDirY == -1 ) && !isPositionFree( x - 1, y + 1, black, white ) )
+         if ( !isPositionFree( x - 1, y + 1, black, white ) )
          {
             //Is this piece killable?
             if ( isKillablePiece( piece, black, white, x - 1, y + 1, -1, 1 ) )
             {
-               killFound = true;
+               //Get the position of the enemy to kill
+               positions[index][0].x = x - 1;
+               positions[index][0].y = y + 1;
 
-               moveCountAdd = getKillMove( positions, movePointCount, piece, black, white, currentIndex, x - 2, y + 2, -1, 1, currentPointIndex + 1 );
+               //Get the position after the kill
+               positions[index][1].x = x - 2;
+               positions[index][1].y = y + 2;
 
-               moveCount += moveCountAdd;
-               currentIndex += moveCountAdd;
-               movePointCount[currentIndex] = currentPointIndex + 1;
+               movePointCount[index] = 2; //2 points in a kill move
 
-               for ( int i = 0 ; i <= currentPointIndex ; i++ )
-               {
-                  positions[currentIndex][i] = tempPositions[i];
-               }
+               moveCount += 1;
+               index += 1;
             }
          }
 
          //Down right
-         //Can't kill down right if we killed up left previously
-         if ( !( preKillDirX == -1 && preKillDirY == -1 ) && !isPositionFree( x + 1, y + 1, black, white ) )
+         if ( !isPositionFree( x + 1, y + 1, black, white ) )
          {
             //Is this piece killable?
             if ( isKillablePiece( piece, black, white, x + 1, y + 1, 1, 1 ) )
             {
-               killFound = true;
+               //Get the position of the enemy to kill
+               positions[index][0].x = x + 1;
+               positions[index][0].y = y + 1;
 
-               moveCountAdd = getKillMove( positions, movePointCount, piece, black, white, currentIndex, x + 2, y + 2, 1, 1, currentPointIndex + 1 );
+               //Get the position after the kill
+               positions[index][1].x = x + 2;
+               positions[index][1].y = y + 2;
 
-               moveCount += moveCountAdd;
-               currentIndex += moveCountAdd;
-               movePointCount[currentIndex] = currentPointIndex + 1;
+               movePointCount[index] = 2; //2 points in a kill move
 
-               for ( int i = 0 ; i <= currentPointIndex ; i++ )
-               {
-                  positions[currentIndex][i] = tempPositions[i];
-               }
+               moveCount += 1;
+               index += 1;
             }
          }
    }
@@ -709,61 +784,50 @@ unsigned int getKillMove(
    if ( king || moveDir == "up" )
    {
          //Up left
-         //Can't kill up left if we killed down right previously
-         if ( !( preKillDirX == 1 && preKillDirY == 1 ) && !isPositionFree( x - 1, y - 1, black, white ) )
+         if ( !isPositionFree( x - 1, y - 1, black, white ) )
          {
             //Is this piece killable?
             if ( isKillablePiece( piece, black, white, x - 1, y - 1, -1, -1 ) )
             {
-               killFound = true;
+               //Get the position of the enemy to kill
+               positions[index][0].x = x - 1;
+               positions[index][0].y = y - 1;
 
-               moveCountAdd = getKillMove( positions, movePointCount, piece, black, white, currentIndex, x - 2, y - 2, -1, -1, currentPointIndex + 1 );
+               //Get the position after the kill
+               positions[index][1].x = x - 2;
+               positions[index][1].y = y - 2;
 
-               moveCount += moveCountAdd;
-               currentIndex += moveCountAdd;
-               movePointCount[currentIndex] = currentPointIndex + 1;
+               movePointCount[index] = 2; //2 points in a kill move
 
-               for ( int i = 0 ; i <= currentPointIndex ; i++ )
-               {
-                  positions[currentIndex][i] = tempPositions[i];
-               }
+               moveCount += 1;
+               index += 1;
             }
          }
 
          //Up right
-         //Can't kill up right if we killed down left previously
-         if ( !( preKillDirX == -1 && preKillDirY == 1 ) && !isPositionFree( x + 1, y - 1, black, white ) )
+         if ( !isPositionFree( x + 1, y - 1, black, white ) )
          {
             //Is this piece killable?
             if ( isKillablePiece( piece, black, white, x + 1, y - 1, 1, -1 ) )
             {
-               killFound = true;
+               //Get the position of the enemy to kill
+               positions[index][0].x = x + 1;
+               positions[index][0].y = y - 1;
 
-               moveCountAdd = getKillMove( positions, movePointCount, piece, black, white, currentIndex, x + 2, y - 2, 1, -1, currentPointIndex + 1 );
+               //Get the position after the kill
+               positions[index][1].x = x + 2;
+               positions[index][1].y = y - 2;
 
-               moveCount += moveCountAdd;
-               currentIndex += moveCountAdd;
-               movePointCount[currentIndex] = currentPointIndex + 1;
+               movePointCount[index] = 2; //2 points in a kill move
 
-               for ( int i = 0 ; i <= currentPointIndex ; i++ )
-               {
-                  positions[currentIndex][i] = tempPositions[i];
-               }
+               moveCount += 1;
+               index += 1;
             }
          }
    }
-   */
 
-   //If no kill was found, this is the end of this kill chain
-   if ( !killFound )
-   {
-      //This move is done, return
-      return 1;
-   }
-   else
-   {
-      return moveCount;
-   }
+   //Return the number of kill moves found
+   return moveCount;
 }
 
 //Gets the numbers of moves for each point on the board based on positions
@@ -774,7 +838,7 @@ unsigned int getKillMove(
 //moveCountMatrix - The number of moves at each point on the board
 //moveCount - The number of possible moves for the current piece
 void getTotalMovesPerPoint( 
-   point positions[MAX_POSSIBLE_MOVES][MAX_MOVE_POINTS], 
+   sf::Vector2i positions[MAX_POSSIBLE_MOVES][MAX_MOVE_POINTS], 
    unsigned int movePointCount[MAX_POSSIBLE_MOVES], 
    unsigned int moveCountMatrix[BOARD_RANGE_HIGH + 1][BOARD_RANGE_HIGH + 1],
    unsigned int moveCount )
@@ -855,7 +919,7 @@ bool isKillablePiece(
 //mouseX - The mouse x position
 //mouseY - The mouse y position
 unsigned int checkMouseOverMove( 
-   point positions[MAX_POSSIBLE_MOVES][MAX_MOVE_POINTS], 
+   sf::Vector2i positions[MAX_POSSIBLE_MOVES][MAX_MOVE_POINTS], 
    unsigned int movePointCount[MAX_POSSIBLE_MOVES], 
    unsigned int moveCountMatrix[BOARD_RANGE_HIGH + 1][BOARD_RANGE_HIGH + 1],
    unsigned int moveCount,
@@ -888,29 +952,3 @@ unsigned int checkMouseOverMove(
 
    return -1;
 }
-
-//Sets the position of the yellow movement squares for a selected stone
-//Param:
-//positions - The possible row and column move positions for the current piece
-//movePointCount - Number of points in a move
-//movementSquares - The RectangleShape squares to set the positions of
-//moveCount - The number of possible moves for the current piece
-/*
-void setMovementRectPositions(
-   point positions[MAX_POSSIBLE_MOVES][MAX_MOVE_POINTS],
-   unsigned int movePointCount[MAX_POSSIBLE_MOVES],
-   sf::RectangleShape movementSquares[MAX_POSSIBLE_MOVES], 
-   unsigned int moveCount )
-{
-   //Set the movement rectangles positions
-   for ( int i = 0 ; i < moveCount ; i++ )
-   {
-      int xPos = BOARD_ORIGIN_X + BOARD_SQUARE_OFFSET + ( positions[i][movePointCount[i] - 1].x * BOARD_SQUARE_SIZE );
-      int yPos = BOARD_ORIGIN_Y + BOARD_SQUARE_OFFSET + ( positions[i][movePointCount[i] - 1].y * BOARD_SQUARE_SIZE );
-
-      movementSquares[i].setPosition( xPos, yPos );
-   }
-
-   return;
-}
-*/
