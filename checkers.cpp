@@ -93,7 +93,7 @@ void stone::shiftPosition( unsigned int x, unsigned int y )
 bool stone::moveTowardsPoint( sf::Vector2f point, float speed, float deltaTime )
 {
    //Move towards point
-   sf::Vector2f moveAmount = interpolate( getPosition(), point, speed ) * ( deltaTime * 60 );
+   sf::Vector2f moveAmount = interpolate( getPosition(), point, speed ) * ( deltaTime * FRAME_RATE );
 
    setPosition( getPosition() + ( moveAmount ) );
 
@@ -238,7 +238,7 @@ void stone::draw( sf::RenderTarget& target, sf::RenderStates states ) const
    states.texture = &m_texture;
 
    //Draw the vertex array
-   target.draw(m_vertices, states);
+   target.draw( m_vertices, states );
 
    return;
 }

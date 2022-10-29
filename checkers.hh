@@ -4,7 +4,12 @@
 #include <SFML/Audio.hpp>
 #include <SFML/Network.hpp>
 
+#include <vector>
 #include <string>
+
+//Constants
+
+const int FRAME_RATE = 60; //Frames per second
 
 const int BOARD_ORIGIN_X = 640 - 296; //Board X and Y centered on the window
 const int BOARD_ORIGIN_Y = 360 - 296;
@@ -24,11 +29,16 @@ const int PIECE_MOVE_SPEED = 5;  //The speed pieces move
 
 //Files
 const std::string SND_MUSIC = "Audio\\DanseMacabre.ogg";
+const std::string SPR_BACKGROUND = "Sprites\\Background.jpg";
 const std::string SPR_BOARD = "Sprites\\CheckersBoard.png";
 const std::string SPR_BLACK_PIECE = "Sprites\\CheckersBlack.png";
 const std::string SPR_WHITE_PIECE = "Sprites\\CheckersWhite.png";
-const std::string SPR_BLACK_KING = "Sprites\\CheckersBlack.png";
-const std::string SPR_WHITE_KING = "Sprites\\CheckersWhite.png";
+const std::string SPR_BLACK_KING = "Sprites\\CheckersBlackKing.png";
+const std::string SPR_WHITE_KING = "Sprites\\CheckersWhiteKing.png";
+
+//Globals
+extern sf::Vector2i globalMousePos;
+extern sf::Vector2f globalMousePosWorld;
 
 #ifndef CHECKERS_H
 #define CHECKERS_H
@@ -38,6 +48,7 @@ enum states
 {
    getAction,  //Get an action
    getChainKill,  //Get the next piece to kill in a kill chain
+   pieceSelected, //A stone/piece is selected currently
    action   //Executing an action
 };
 
@@ -109,12 +120,13 @@ class stone : public sf::Drawable, public sf::Transformable
       void setTexture( sf::Texture& texture );
 
    private:
-   bool alive = true;
-      bool king = false;
       unsigned int boardX = 0;
       unsigned int boardY = 0;
       unsigned int width = PIECE_SIZE;
       unsigned int height = PIECE_SIZE;
+
+      bool alive = true;
+      bool king = false;
 
       std::string color;    //"black" or "white"
       std::string moveDir;  //"down" or "up"
@@ -129,18 +141,23 @@ class stone : public sf::Drawable, public sf::Transformable
 bool inRange( unsigned int value, unsigned int low, unsigned int high );
 sf::Vector2f interpolate( sf::Vector2f pointA, sf::Vector2f pointB, float speed );
 
-bool isPositionFree( unsigned int x, unsigned int y, stone black[ROW_SIZE][COLUMN_SIZE], stone white[ROW_SIZE][COLUMN_SIZE] );
-stone* getStoneFromPosition( unsigned int x, unsigned int y, stone black[ROW_SIZE][COLUMN_SIZE], stone white[ROW_SIZE][COLUMN_SIZE] );
+void getNextTurn( std::string& currentTurn, bool& canKill, 
+                  sf::Vector2i positions[MAX_POSSIBLE_MOVES][MAX_MOVE_POINTS], 
+                  unsigned int movePointCount[MAX_POSSIBLE_MOVES], 
+                  std::vector<stone>& black, std::vector<stone>& white );
+
+bool isPositionFree( unsigned int x, unsigned int y, std::vector<stone>& black, std::vector<stone>& white );
+stone* getStoneFromPosition( unsigned int x, unsigned int y, std::vector<stone>& black, std::vector<stone>& white );
 
 unsigned int getMovePositions( 
    sf::Vector2i positions[MAX_POSSIBLE_MOVES][MAX_MOVE_POINTS], 
    unsigned int movePointCount[MAX_POSSIBLE_MOVES], 
-   stone piece, stone black[ROW_SIZE][COLUMN_SIZE], stone white[ROW_SIZE][COLUMN_SIZE] );
+   stone piece, std::vector<stone>& black, std::vector<stone>& white );
 
 unsigned int confirmPosition( 
    sf::Vector2i positions[MAX_POSSIBLE_MOVES][MAX_MOVE_POINTS],
    unsigned int movePointCount[MAX_POSSIBLE_MOVES], 
-   stone piece, stone black[ROW_SIZE][COLUMN_SIZE], stone white[ROW_SIZE][COLUMN_SIZE], 
+   stone piece, std::vector<stone>& black, std::vector<stone>& white, 
    unsigned int index, 
    unsigned int x, unsigned int y, 
    unsigned int xChange, unsigned int yChange );
@@ -148,25 +165,25 @@ unsigned int confirmPosition(
 unsigned int getKillMoves( 
    sf::Vector2i positions[MAX_POSSIBLE_MOVES][MAX_MOVE_POINTS], 
    unsigned int movePointCount[MAX_POSSIBLE_MOVES],
-   stone piece, stone black[ROW_SIZE][COLUMN_SIZE], stone white[ROW_SIZE][COLUMN_SIZE], 
+   stone piece, std::vector<stone>& black, std::vector<stone>& white, 
    unsigned int x, unsigned int y );
 
-void getTotalMovesPerPoint( 
+bool hasKillMoves( 
    sf::Vector2i positions[MAX_POSSIBLE_MOVES][MAX_MOVE_POINTS], 
-   unsigned int movePointCount[MAX_POSSIBLE_MOVES], 
-   unsigned int moveCountMatrix[BOARD_RANGE_HIGH + 1][BOARD_RANGE_HIGH + 1],
-   unsigned int moveCount );
+   unsigned int movePointCount[MAX_POSSIBLE_MOVES],
+   stone piece, std::vector<stone>& black, std::vector<stone>& white );
 
 bool isKillablePiece( 
-   stone piece, stone black[ROW_SIZE][COLUMN_SIZE], stone white[ROW_SIZE][COLUMN_SIZE], 
+   stone piece, std::vector<stone>& black, std::vector<stone>& white, 
    unsigned int x, unsigned int y, 
    unsigned int xChange, unsigned int yChange );
 
 unsigned int checkMouseOverMove( 
    sf::Vector2i positions[MAX_POSSIBLE_MOVES][MAX_MOVE_POINTS], 
    unsigned int movePointCount[MAX_POSSIBLE_MOVES], 
-   unsigned int moveCountMatrix[BOARD_RANGE_HIGH + 1][BOARD_RANGE_HIGH + 1],
    unsigned int moveCount,
    int mouseX, int mouseY );
+
+void removeDeadPieces( std::vector<stone>& black, std::vector<stone>& white );
 
 #endif
