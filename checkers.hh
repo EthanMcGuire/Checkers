@@ -11,30 +11,44 @@
 
 const int FRAME_RATE = 60; //Frames per second
 
-const int BOARD_ORIGIN_X = 640 - 296; //Board X and Y centered on the window
-const int BOARD_ORIGIN_Y = 360 - 296;
+//Window size
+const int WINDOW_WIDTH = 1280;
+const int WINDOW_HEIGHT = 720;
+
+const int BOARD_SIZE = 592;
+const int BOARD_ORIGIN_X = WINDOW_WIDTH / 2 - BOARD_SIZE / 2; //Board X and Y centered on the window
+const int BOARD_ORIGIN_Y = WINDOW_HEIGHT / 2 - BOARD_SIZE / 2;
 const int BOARD_SQUARE_SIZE = 72;
 const int BOARD_SQUARE_OFFSET = 8;
 const int PIECE_OFFSET = 4;   //Offset for a stone/piece from the top left corner of a square
-const int PIECE_SIZE = 64;
 const int WHITE_PLAYER_ROW_OFFSET = 5; //5 rows down from the last black row
-const int PIECE_COUNT_PER_PLAYER = 12;  //12 pieces per player
 const int ROW_SIZE = 4;  //4 pieces started in a row
 const int COLUMN_SIZE = 3;   //3 pieces started in a column (per player)
 const int BOARD_RANGE_LOW = 0;   //The low and high range of squares on the board
 const int BOARD_RANGE_HIGH = 7;
+
+const int PIECE_COUNT = 12;   //Pieces in a team
+const int PIECE_MOVE_SPEED = 5;  //The speed pieces move
+const int PIECE_SIZE = 64;
 const int MAX_POSSIBLE_MOVES = 4;   //Max 4 possible moves for a single checkers piece
 const int MAX_MOVE_POINTS = 2;  //2 possible points in 1 moves (killing a piece is 2 points)
-const int PIECE_MOVE_SPEED = 5;  //The speed pieces move
+
+//AI
+const int MAX_DEPTH = 3;  //Max depth for minimax
 
 //Files
-const std::string SND_MUSIC = "Audio\\DanseMacabre.ogg";
+const std::string SND_MUSIC = "Audio\\musicDanseMacabre.ogg";
+const std::string SND_PIECE_MOVE = "Audio\\sndPieceMove.wav";
+const std::string SND_WIN = "Audio\\sndWin.wav";
 const std::string SPR_BACKGROUND = "Sprites\\Background.jpg";
 const std::string SPR_BOARD = "Sprites\\CheckersBoard.png";
 const std::string SPR_BLACK_PIECE = "Sprites\\CheckersBlack.png";
 const std::string SPR_WHITE_PIECE = "Sprites\\CheckersWhite.png";
 const std::string SPR_BLACK_KING = "Sprites\\CheckersBlackKing.png";
 const std::string SPR_WHITE_KING = "Sprites\\CheckersWhiteKing.png";
+const std::string SPR_BLACK_FLAG = "Sprites\\FlagBlack.png";
+const std::string SPR_WHITE_FLAG = "Sprites\\FlagWhite.png";
+const std::string FONT = "Fonts\\cour.ttf";
 
 //Globals
 extern sf::Vector2i globalMousePos;
@@ -42,15 +56,6 @@ extern sf::Vector2f globalMousePosWorld;
 
 #ifndef CHECKERS_H
 #define CHECKERS_H
-
-//States
-enum states
-{
-   getAction,  //Get an action
-   getChainKill,  //Get the next piece to kill in a kill chain
-   pieceSelected, //A stone/piece is selected currently
-   action   //Executing an action
-};
 
 //Define the stone class (checkers pieces)
 class stone : public sf::Drawable, public sf::Transformable
@@ -138,13 +143,69 @@ class stone : public sf::Drawable, public sf::Transformable
    virtual void draw( sf::RenderTarget& target, sf::RenderStates states ) const;
 };
 
+//States
+enum states
+{
+   getAction,  //Get an action
+   getChainKill,  //Get the next piece to kill in a kill chain
+   pieceSelected, //A stone/piece is selected currently
+   startAction,   //Begins the action state and sets values
+   action,   //Executing an action
+   gameOver
+};
+
+//Database
+//For keeping track of teams on the board
+struct teamDatabase
+{
+   std::vector<stone> black;
+   std::vector<stone> white;
+   unsigned int valueBlack, valueWhite, value;
+   bool chainKill;   //Whether a kill is available after reaching this database
+   stone* chainKillPiece;
+};
+
+struct move
+{
+   sf::Vector2i piecePosition, goalPosition;
+};
+
 bool inRange( unsigned int value, unsigned int low, unsigned int high );
 sf::Vector2f interpolate( sf::Vector2f pointA, sf::Vector2f pointB, float speed );
 
-void getNextTurn( std::string& currentTurn, bool& canKill, 
-                  sf::Vector2i positions[MAX_POSSIBLE_MOVES][MAX_MOVE_POINTS], 
-                  unsigned int movePointCount[MAX_POSSIBLE_MOVES], 
-                  std::vector<stone>& black, std::vector<stone>& white );
+void getNextTurn( std::string& currentTurn, bool& canKill, std::vector<stone>& black, std::vector<stone>& white );
+
+void getAIMove( 
+   move* finalMove,
+   std::vector<stone>& black, std::vector<stone>& white, sf::Vector2i& piecePosition,
+   std::string aiTeam,
+   bool chainKill, stone* chainKillPiece );
+
+unsigned int aiMax( 
+   unsigned int depth,
+   struct teamDatabase teams, 
+   std::string aiTeam,
+   move* finalMove, bool first );
+
+unsigned int aiMin( 
+   unsigned int depth,
+   struct teamDatabase teams,
+   std::string aiTeam );
+
+unsigned int aiMaxChainKill( 
+   unsigned int depth,
+   struct teamDatabase teams, 
+   std::string aiTeam,
+   move* finalMove, bool first,
+   unsigned int maxValue );
+
+unsigned int aiMinChainKill( 
+   unsigned int depth,
+   struct teamDatabase teams, 
+   std::string aiTeam,
+   unsigned int minValue );
+
+unsigned int getTeamUtilityValue( struct teamDatabase* teams, std::string team );
 
 bool isPositionFree( unsigned int x, unsigned int y, std::vector<stone>& black, std::vector<stone>& white );
 stone* getStoneFromPosition( unsigned int x, unsigned int y, std::vector<stone>& black, std::vector<stone>& white );
@@ -168,10 +229,11 @@ unsigned int getKillMoves(
    stone piece, std::vector<stone>& black, std::vector<stone>& white, 
    unsigned int x, unsigned int y );
 
-bool hasKillMoves( 
-   sf::Vector2i positions[MAX_POSSIBLE_MOVES][MAX_MOVE_POINTS], 
-   unsigned int movePointCount[MAX_POSSIBLE_MOVES],
-   stone piece, std::vector<stone>& black, std::vector<stone>& white );
+unsigned int getPiecesThatCanKill( std::vector<stone>& black, std::vector<stone>& white, sf::Vector2f *killSpots, std::string& currentTurn );
+
+bool hasKillMoves( stone piece, std::vector<stone>& black, std::vector<stone>& white );
+
+bool canTeamKill( std::string teamName, std::vector<stone>& black, std::vector<stone>& white );
 
 bool isKillablePiece( 
    stone piece, std::vector<stone>& black, std::vector<stone>& white, 

@@ -22,7 +22,11 @@ int main()
    //Main
    states state = getAction;
    std::string currentTurn = "white";
+   std::string playerTeam = "white";
+   std::string aiTeam = "black";
+   std::string winner;
    bool canKill = false;
+   bool twoPlayer = false;
 
    //Window
    sf::RenderWindow window;
@@ -30,25 +34,35 @@ int main()
    sf::Vector2i globalMousePos;
    sf::Vector2f globalMousePosWorld;
 
-   //Music
-   sf::Music music;
+   //Audio
+   sf::Music music;  //Music
+   sf::SoundBuffer bufferPieceMove, bufferWin; //Sound buffers
+   sf::Sound sndPieceMove, sndWin; //Sound entities
 
    //Graphical
    sf::Texture background;
    sf::Texture boardTexture;
+   sf::Texture blackFlagTexture, whiteFlagTexture;
    sf::Texture blackStoneTexture, blackKingTexture;
    sf::Texture whiteStoneTexture, whiteKingTexture;
    sf::Sprite spriteBackground;
    sf::Sprite spriteBoard; //592 by 592
+   sf::Sprite spriteWhiteFlag, spriteBlackFlag;
    sf::Sprite killHighlight;  //Highlight on pieces to kill
+   sf::Sprite canKillHighlight;  //Highlight on pieces that can kill
    sf::Sprite pieceHighlight; //Highlight on a currently selected piece
    sf::Sprite moveHighlight; //Highlight for a pieces movement
+   sf::RectangleShape winRect;
+
+   //Font/text
+   sf::Font font;
+   sf::Text textWin; //Displays when someone wins
 
    //Piece Information
    std::vector<stone> black;
    std::vector<stone> white;
-   unsigned int blackCount = 12;
-   unsigned int whiteCount = 12;
+   unsigned int blackCount = PIECE_COUNT;
+   unsigned int whiteCount = PIECE_COUNT;
 
    //Move selection
    bool selected = false;  //True when a piece is pressed on
@@ -56,9 +70,12 @@ int main()
    unsigned int mouseMoveIndex;  //The movePositions index the mouse is highlighted over
 
    //Move info
+   sf::Vector2f killSpots[PIECE_COUNT];
+   unsigned int killMoveCount = 0;
    sf::Vector2i movePositions[MAX_POSSIBLE_MOVES][MAX_MOVE_POINTS];   //The coordinates on the board where this piece can move
    unsigned int movePointCount[MAX_POSSIBLE_MOVES];   //The number of points within a move
    unsigned int moveCount; //Total moves found for a piece
+   bool killChain;   //Whether a kill chain can be executed
 
    //Action Control
    bool executingAction = false; //Whether an action is currently being executed (e.g. piece move)
@@ -77,16 +94,44 @@ int main()
    int i, j, k;
 
    //Create the window
-   window.create( sf::VideoMode(1280, 720), "Checkers" );   //1280p window
+   window.create( sf::VideoMode( WINDOW_WIDTH, WINDOW_HEIGHT ), "Checkers", sf::Style::Titlebar | sf::Style::Close | sf::Style::Resize );
    window.setFramerateLimit( 60 );
 
-   //Play music
+   //Load audio
 
    if ( !music.openFromFile( SND_MUSIC ) )
       return EXIT_FAILURE;
 
+   if ( !bufferPieceMove.loadFromFile( SND_PIECE_MOVE ) )
+      return EXIT_FAILURE;
+
+   if ( !bufferWin.loadFromFile( SND_WIN ) )
+      return EXIT_FAILURE;
+
+   sndPieceMove.setBuffer( bufferPieceMove );
+   sndWin.setBuffer( bufferWin );
+
+   //Play music
    music.setLoop( true );
    music.play();
+
+   //Load font and set up text
+
+   if ( !font.loadFromFile( FONT ) )
+      return EXIT_FAILURE;
+
+   //Win text
+   textWin.setPosition( window.getView().getCenter() );
+   textWin.setFont( font );
+   textWin.setCharacterSize( 50 );
+   textWin.setFillColor( sf::Color( 255, 255, 255 ) );
+   textWin.setStyle( sf::Text::Bold | sf::Text::Italic );
+
+   //Win rectangle
+   winRect.setPosition( window.getView().getCenter() );
+   winRect.setFillColor( sf::Color( 139, 69, 19, 224 ) ); //Saddlebrown
+   winRect.setOutlineColor( sf::Color( 245, 222, 179, 224 ) ); //Wheat
+   winRect.setOutlineThickness( 4 );
 
    //Create the game textures
 
@@ -94,6 +139,12 @@ int main()
       return EXIT_FAILURE;
 
    if ( !boardTexture.loadFromFile( SPR_BOARD ) )
+      return EXIT_FAILURE;
+
+   if ( !blackFlagTexture.loadFromFile( SPR_BLACK_FLAG ) )
+      return EXIT_FAILURE;
+
+   if ( !whiteFlagTexture.loadFromFile( SPR_WHITE_FLAG ) )
       return EXIT_FAILURE;
 
    if ( !blackStoneTexture.loadFromFile( SPR_BLACK_PIECE ) )
@@ -111,15 +162,29 @@ int main()
    //Get the sprite textures
    spriteBackground.setTexture( background );
    spriteBoard.setTexture( boardTexture );
+   spriteWhiteFlag.setTexture( whiteFlagTexture );
+   spriteBlackFlag.setTexture( blackFlagTexture );
+
    moveHighlight.setTexture( whiteStoneTexture );
    pieceHighlight.setTexture( whiteStoneTexture );
+   canKillHighlight.setTexture( whiteStoneTexture );
    killHighlight.setTexture( whiteStoneTexture );
 
    //Set the board position
    spriteBoard.setPosition( BOARD_ORIGIN_X, BOARD_ORIGIN_Y ); //Center the checkers board
 
+   //Set the flag positions
+   sf::FloatRect flagBounds;
+
+   flagBounds = spriteBlackFlag.getLocalBounds();
+   spriteBlackFlag.setPosition( BOARD_ORIGIN_X - flagBounds.width - 16, BOARD_ORIGIN_Y - 32 );
+
+   flagBounds = spriteWhiteFlag.getLocalBounds();
+   spriteWhiteFlag.setPosition( BOARD_ORIGIN_X + BOARD_SIZE + 16, BOARD_ORIGIN_Y + BOARD_SIZE - 192 );
+
    //Set the piece highlight color
-   pieceHighlight.setColor( sf::Color( 0, 255, 0, 128 ) );  //50% opacity yellow
+   pieceHighlight.setColor( sf::Color( 0, 255, 0, 128 ) );  //50% opacity green
+   canKillHighlight.setColor( sf::Color( 255, 255, 0, 128 ) );  //50% opacity yellow
 
    //Create the pieces
    unsigned int offset; //Offset based on shifted rows (On the board)
@@ -197,7 +262,8 @@ int main()
             window.close();
          }
 
-         if ( state == getAction || state == getChainKill )
+         //Do NOT get mouse inputs, if it is not the players turn (Unless playing 2 player)
+         if ( ( playerTeam == currentTurn || twoPlayer ) && ( state == getAction || state == getChainKill ) )
          {
             //Mouse moved
             if ( event.type == sf::Event::MouseMoved )
@@ -224,32 +290,8 @@ int main()
                         //This is executed during the getAction or getChainKill state
 
                         selected = false;
-
-                        state = action;
+                        state = startAction;
                         moveIndex = mouseMoveIndex;
-
-                        killAction = false;
-
-                        //Is this is a kill move?
-                        if ( movePointCount[moveIndex] > 1 )
-                        {
-                           //First point is the enemies location
-                           pieceToKill = getStoneFromPosition( movePositions[moveIndex][0].x, movePositions[moveIndex][0].y, black, white );
-
-                           killAction = true;
-                        }
-
-                        //Set the action start and goal positions
-                        actionPointStart = selectedPiece -> getPosition();
-
-                        actionPointGoalBoard.x = movePositions[moveIndex][movePointCount[moveIndex] - 1].x;
-                        actionPointGoalBoard.y = movePositions[moveIndex][movePointCount[moveIndex] - 1].y;
-
-                        actionPointGoal.x = BOARD_ORIGIN_X + BOARD_SQUARE_OFFSET + PIECE_OFFSET + ( BOARD_SQUARE_SIZE * actionPointGoalBoard.x );
-                        actionPointGoal.y = BOARD_ORIGIN_Y + BOARD_SQUARE_OFFSET + PIECE_OFFSET + ( BOARD_SQUARE_SIZE * actionPointGoalBoard.y );
-
-                        actionLength = actionPointGoal - actionPointStart;
-                        actionLengthReal = sqrt( pow( actionLength.x, 2 ) + pow( actionLength.y, 2 ) );
                      }
                   }
 
@@ -291,7 +333,7 @@ int main()
                      }
 
                      //Cancel the selection if canKill and no kill moves found
-                     if ( selected && canKill && !hasKillMoves( movePositions, movePointCount, *selectedPiece, black, white ) )
+                     if ( selected && canKill && !hasKillMoves( *selectedPiece, black, white ) )
                      {
                         selected = false;
                         selectedPiece = nullptr;
@@ -316,12 +358,65 @@ int main()
 
       //Step Actions
 
-      if ( state == action )
+      if ( !twoPlayer && currentTurn != playerTeam )
+      {
+         //Get the AI's move
+
+         if ( state == getAction || state == getChainKill )
+         {
+            sf::Vector2i piecePosition;
+            move finalMove;
+
+            getAIMove( &finalMove, black, white, piecePosition, aiTeam, killChain, selectedPiece );
+
+            //Get the stone for the selected move
+            selectedPiece = getStoneFromPosition( piecePosition.x, piecePosition.y, black, white );
+
+            std::cout << "HUH " << finalMove.goalPosition.x;
+
+
+
+            selected = false;
+            moveIndex = 0;
+            state = startAction;
+         }
+      }
+      else if ( state == startAction )
+      {
+         //Starts an action
+
+         state = action;
+
+         killAction = false;
+
+         //Is this is a kill move?
+         if ( movePointCount[moveIndex] > 1 )
+         {
+            //First point is the enemies location
+            pieceToKill = getStoneFromPosition( movePositions[moveIndex][0].x, movePositions[moveIndex][0].y, black, white );
+
+            killAction = true;
+         }
+
+         //Set the action start and goal positions
+         actionPointStart = selectedPiece -> getPosition();
+
+         actionPointGoalBoard.x = movePositions[moveIndex][movePointCount[moveIndex] - 1].x;
+         actionPointGoalBoard.y = movePositions[moveIndex][movePointCount[moveIndex] - 1].y;
+
+         actionPointGoal.x = BOARD_ORIGIN_X + BOARD_SQUARE_OFFSET + PIECE_OFFSET + ( BOARD_SQUARE_SIZE * actionPointGoalBoard.x );
+         actionPointGoal.y = BOARD_ORIGIN_Y + BOARD_SQUARE_OFFSET + PIECE_OFFSET + ( BOARD_SQUARE_SIZE * actionPointGoalBoard.y );
+
+         actionLength = actionPointGoal - actionPointStart;
+         actionLengthReal = sqrt( pow( actionLength.x, 2 ) + pow( actionLength.y, 2 ) );
+      }
+      else if ( state == action )
       {
          //Executing an action
          
          //Move the selected piece to the point goal
          bool pointReached = false;
+         bool king = selectedPiece -> isKing();
          float scale = 1;
          float progress, lengthTraveledReal;
          sf::Vector2f lengthTraveled;
@@ -358,7 +453,10 @@ int main()
             selectedPiece -> setBoardPosition( actionPointGoalBoard.x, actionPointGoalBoard.y );
             selectedPiece -> setScale( 1, 1 );
 
-            bool killChain = false;
+            //Play move sound
+            sndPieceMove.play();
+
+            killChain = false;
 
             if ( killAction )
             {
@@ -367,20 +465,28 @@ int main()
 
                removeDeadPieces( black, white );
 
-               //Check for kill chains
-               moveCount = getKillMoves( movePositions, movePointCount, *selectedPiece, black, white, actionPointGoalBoard.x, actionPointGoalBoard.y );
-
-               if ( moveCount != 0 )
+               //A kill chain CANNOT be executed once a piece becomes king
+               if ( selectedPiece -> isKing() == king )
                {
-                  //Set up move information
+                  //Check for kill chains
+                  moveCount = getKillMoves( movePositions, movePointCount, *selectedPiece, black, white, actionPointGoalBoard.x, actionPointGoalBoard.y );
 
-                  //Set the piece highlight on the current pieces location
-                  pieceHighlight.setPosition( selectedPiece -> getPosition() );
+                  if ( moveCount != 0 )
+                  {
+                     //Set up move information
 
-                  //Check for mouse over this new move
-                  mouseMoveIndex = checkMouseOverMove( movePositions, movePointCount, moveCount, globalMousePosWorld.x, globalMousePosWorld.y );
+                     //AI doesn't need this
+                     if ( twoPlayer || currentTurn == playerTeam )
+                     {
+                        //Set the piece highlight on the current pieces location
+                        pieceHighlight.setPosition( selectedPiece -> getPosition() );
 
-                  killChain = true;
+                        //Check for mouse over this new move
+                        mouseMoveIndex = checkMouseOverMove( movePositions, movePointCount, moveCount, globalMousePosWorld.x, globalMousePosWorld.y );
+                     }
+
+                     killChain = true;
+                  }
                }
             }
 
@@ -388,17 +494,60 @@ int main()
             {
                //Start the getChainKill state
 
-               selected = true;
+               //AI moves don't get highlighted
+               if ( twoPlayer || currentTurn == playerTeam )
+               {
+                  selected = true;
+               }
+
                state = getChainKill;
             }
             else
             {
-               //Return to the getAction state
+               //Check for game win
+               if ( black.size() == 0 )
+               {
+                  winner = "White";
+                  state = gameOver;
+               }
+               else if ( white.size() == 0 )
+               {
+                  winner = "Black";
+                  state = gameOver;
+               }
 
                selectedPiece = nullptr;
-               state = getAction;
 
-               getNextTurn( currentTurn, canKill, movePositions, movePointCount, black, white );
+               if ( state != gameOver )
+               {
+                  //Next turn
+                  state = getAction;
+
+                  getNextTurn( currentTurn, canKill, black, white );
+                  killMoveCount = getPiecesThatCanKill( black, white, killSpots, currentTurn );
+               }
+               else
+               {
+                  sf::FloatRect textBounds, rectBounds;
+
+                  //Set the win text
+                  textWin.setString( winner + " Wins!" );
+
+                  //Center the win text
+                  textBounds = textWin.getLocalBounds();
+
+                  textWin.setOrigin( textBounds.left + textBounds.width / 2.0f, textBounds.top + textBounds.height / 2.0f );
+
+                  //Center and get the win rectangle
+                  winRect.setSize( sf::Vector2f( textBounds.width + 48, textBounds.height + 32 ) );
+
+                  rectBounds = winRect.getLocalBounds();
+
+                  winRect.setOrigin( rectBounds.left + rectBounds.width / 2.0f, rectBounds.top + rectBounds.height / 2.0f  );
+
+                  //Play the victory sound!
+                  sndWin.play();
+               }
             }
          }
       }
@@ -428,6 +577,10 @@ int main()
 
       //Moving piece gets drawn over the other pieces
       if ( state == action ) window.draw( *selectedPiece );
+
+      //Draw the team flags
+      window.draw( spriteWhiteFlag ) ;
+      window.draw( spriteBlackFlag ) ;
    
       //Draw the possible move positions and piece highlights
       if ( selected )
@@ -480,6 +633,28 @@ int main()
 
          //Draw the selected piece highlight
          window.draw( pieceHighlight );
+      }
+      else
+      {
+         if ( state == getAction )
+         {
+            //Highlight pieces that can kill
+            if ( canKill )
+            {
+               for ( i = 0 ; i < killMoveCount ; i++ )
+               {
+                  canKillHighlight.setPosition( killSpots[i] );
+                  window.draw( canKillHighlight );
+               }
+            }
+         }
+      }
+
+      //Draw win text
+      if ( state == gameOver )
+      {
+         window.draw( winRect );
+         window.draw( textWin );
       }
       
       //Update the window display
@@ -535,14 +710,9 @@ sf::Vector2f interpolate( sf::Vector2f pointA, sf::Vector2f pointB, float speed 
 //Param:
 //currentTurn - The current color whose team it is
 //canKill - Whether a kill move can be performed
-//positions - The array of x and y positions for possible moves
-//movePointCount - The number of points in a move
 //black - The array of black pieces
 //white - The array of white pieces
-void getNextTurn( std::string& currentTurn, bool& canKill, 
-                  sf::Vector2i positions[MAX_POSSIBLE_MOVES][MAX_MOVE_POINTS], 
-                  unsigned int movePointCount[MAX_POSSIBLE_MOVES], 
-                  std::vector<stone>& black, std::vector<stone>& white )
+void getNextTurn( std::string& currentTurn, bool& canKill, std::vector<stone>& black, std::vector<stone>& white )
 {
    int i = 0;
 
@@ -552,29 +722,587 @@ void getNextTurn( std::string& currentTurn, bool& canKill,
    if ( currentTurn == "black" )
    {
       currentTurn = "white";
-
-      //Check all pieces for a kill move
-      for ( i = 0 ; i < white.size() ; i++ )
-      {
-         if ( hasKillMoves( positions, movePointCount, white.at(i), black, white ) )
-         {
-            canKill = true;
-         }
-      }
    }
    else
    {
       currentTurn = "black";
+   }
 
-      //Check all pieces for a kill move
-      for ( i = 0 ; i < black.size() ; i++ )
+   canKill = canTeamKill( currentTurn, black, white );
+}
+
+//Gets the next move for the AI using the getTeamUtilityValue and min/max functions
+//Param:
+//positions - The array of x and y positions for possible moves
+//movePointCount - The number of points in a move
+//black - The array of black pieces
+//white - The array of white pieces
+//piecePosition - x and y position of the piece to move
+//teamName - The team to get a move for (The AI's team)
+//canKill - Whether this team can currently kill
+//chainKillPiece - The piece that can chainKill
+void getAIMove( 
+   move* finalMove, 
+   std::vector<stone>& black, std::vector<stone>& white, sf::Vector2i& piecePosition,
+   std::string aiTeam,
+   bool chainKill, stone* chainKillPiece )
+{
+   struct teamDatabase teams;
+
+   teams.black = black;
+   teams.white = white;
+   teams.chainKill = chainKill;
+   teams.chainKillPiece = chainKillPiece;
+
+   teams.value = aiMax( 0, teams, aiTeam, finalMove, true );
+
+   std::cout << "Value :" << teams.value << "\n";
+
+   return;
+}
+
+unsigned int aiMax( 
+   unsigned int depth,
+   struct teamDatabase teams, 
+   std::string aiTeam,
+   move* finalMove, bool first )
+{
+   sf::Vector2i newPositions[MAX_POSSIBLE_MOVES][MAX_MOVE_POINTS];
+   unsigned int newMovePointCount[MAX_POSSIBLE_MOVES];
+
+   //Final move info
+   sf::Vector2i maxPosition[MAX_MOVE_POINTS];
+   unsigned int maxPointCount;
+   sf::Vector2i position;  //Piece to move position
+
+   struct teamDatabase newTeams;
+   std::vector<stone>* team;
+   stone* piece;  //Current piece to look at moves for
+   stone* pieceDatabase, *pieceKill;  //Piece to mess with in the database
+
+   unsigned int moveCount;
+   unsigned int i, j, k;
+   unsigned int maxValue;
+   bool canKill;
+
+   maxValue = -999;
+
+   std::cout << depth << "\n";
+
+   if ( depth >= MAX_DEPTH )
+   {
+      return getTeamUtilityValue( &teams, aiTeam );
+   }
+
+   //Determine possible moves and databases
+
+   if ( teams.chainKill )
+   {
+      std::cout << "Max Chain Kill\n";
+
+      return aiMaxChainKill( depth, teams, aiTeam, finalMove, first, maxValue );
+   }  
+   else
+   {
+      //Get the AI team
+      if ( aiTeam == "black" )
       {
-         if ( hasKillMoves( positions, movePointCount, black.at(i), black, white ) )
+         team = &teams.black;
+      }
+      else
+      {
+         team = &teams.white;
+      }
+
+      //Are kills possible?
+      canKill = canTeamKill( aiTeam, teams.black, teams.white );
+
+      if ( canKill )
+      {
+         std::cout << "Max kill Moves\n";
+
+         //Only look at pieces that can kill for moves
+         for ( i = 0 ; i < team -> size() ; i++ )
          {
-            canKill = true;
+            if ( hasKillMoves( team -> at(i), teams.black, teams.white ) )
+            {
+               piece = &team -> at(i);
+
+               //Get all kill moves for this piece
+               moveCount = getKillMoves( newPositions, newMovePointCount, *piece, teams.black, teams.white, piece -> getBoardXPos(), piece -> getBoardYPos() );
+
+               //Get databases for these move
+               for ( j = 0 ; j < moveCount ; j++ )
+               {
+                  unsigned int temp = maxValue;
+                  bool king = false;
+
+                  //Get newTeams
+                  newTeams = teams;
+                  newTeams.chainKill = false;
+                  newTeams.chainKillPiece = nullptr;
+                  
+                  //Move the moving piece to the end of their move
+                  pieceDatabase = getStoneFromPosition( piece -> getBoardXPos(), piece -> getBoardYPos(), newTeams.black, newTeams.white );
+                  pieceDatabase -> setBoardPosition( newPositions[j][ newMovePointCount[j] - 1 ].x, newPositions[j][ newMovePointCount[j] - 1 ].y );
+
+                  king = pieceDatabase -> isKing();
+
+                  pieceKill = getStoneFromPosition( newPositions[j][0].x, newPositions[j][0].y, newTeams.black, newTeams.white );
+                  pieceKill -> kill();
+
+                  removeDeadPieces( newTeams.black, newTeams.white );
+
+                  //Check for chain kill
+                  if ( king == pieceDatabase -> isKing() )
+                  {
+                     if ( hasKillMoves( *pieceDatabase, newTeams.black, newTeams.white ) )
+                     {
+                        newTeams.chainKill = true;
+                        newTeams.chainKillPiece = pieceDatabase;
+
+                        maxValue = std::max( maxValue, aiMaxChainKill( depth, newTeams, aiTeam, finalMove, first, maxValue ) );
+                     }
+                  }
+
+                  if ( !newTeams.chainKill )
+                  {
+                     //Call min for this database
+                     maxValue = std::max( maxValue, aiMin( depth + 1, newTeams, aiTeam ) );
+
+                     //Check for best value
+                     if ( first && maxValue != temp ) 
+                     {
+                        //Get the best move positions
+                        finalMove -> goalPosition.x = newPositions[j][newMovePointCount[j] - 1].x;
+                        finalMove -> goalPosition.y = newPositions[j][newMovePointCount[j] - 1].y;
+
+                        //Piece to moves position
+                        finalMove -> piecePosition.x = piece -> getBoardXPos();
+                        finalMove -> piecePosition.y = piece -> getBoardYPos();
+                     }
+                  }
+               }
+            }
+         }
+      }
+      else
+      {
+         std::cout << "Default Max moves\n";
+
+         //Look at EVERY piece for moves
+         for ( i = 0 ; i < team -> size() ; i++ )
+         {
+            piece = &team -> at(i);
+
+            //Get all moves for this piece
+            moveCount = getMovePositions( newPositions, newMovePointCount, *piece, teams.black, teams.white );
+
+            //Get databases for these move
+            for ( j = 0 ; j < moveCount ; j++ )
+            {
+               unsigned int temp = maxValue;
+
+               //Get newTeams
+               newTeams = teams;
+               newTeams.chainKill = false;
+               newTeams.chainKillPiece = nullptr;
+               
+               //Move the moving piece to the end of their move
+               pieceDatabase = getStoneFromPosition( piece -> getBoardXPos(), piece -> getBoardYPos(), newTeams.black, newTeams.white );
+               pieceDatabase -> setBoardPosition( newPositions[j][ newMovePointCount[j] - 1 ].x, newPositions[j][ newMovePointCount[j] - 1 ].y );
+
+               //Call min for this database
+               maxValue = std::max( maxValue, aiMin( depth + 1, newTeams, aiTeam ) );
+
+               //Check for best value
+               if ( first && maxValue != temp ) 
+               {
+                  //Get the best move positions
+                  finalMove -> goalPosition.x = newPositions[j][newMovePointCount[j] - 1].x;
+                  finalMove -> goalPosition.y = newPositions[j][newMovePointCount[j] - 1].y;
+
+                  //Piece to moves position
+                  finalMove -> piecePosition.x = piece -> getBoardXPos();
+                  finalMove -> piecePosition.y = piece -> getBoardYPos();
+               }
+            }
          }
       }
    }
+
+   //Return the best utility value
+   return maxValue;
+}
+
+unsigned int aiMin( 
+   unsigned int depth,
+   struct teamDatabase teams,
+   std::string aiTeam )
+{
+   sf::Vector2i newPositions[MAX_POSSIBLE_MOVES][MAX_MOVE_POINTS];
+   unsigned int newMovePointCount[MAX_POSSIBLE_MOVES];
+
+   struct teamDatabase newTeams;
+   std::vector<stone>* team;
+   stone* piece;  //Current piece to look at moves for
+   stone* pieceDatabase, *pieceKill;  //Piece to mess with in the database
+
+   std::string opponentTeam;
+
+   unsigned int moveCount;
+   unsigned int i, j, k;
+   unsigned int minValue;
+   bool canKill;
+
+   minValue = 999;
+
+   std::cout << depth << "\n";
+
+   if ( depth >= MAX_DEPTH )
+   {
+      return getTeamUtilityValue( &teams, aiTeam );
+   }
+
+   //Get the opponent team
+   if ( aiTeam == "black" )
+   {
+      opponentTeam = "white";
+   }
+   else
+   {
+      opponentTeam = "black";
+   }
+
+   //Determine possible moves and databases
+
+   if ( teams.chainKill )
+   {
+      std::cout << "Min Chain Kill\n";
+
+      return aiMinChainKill( depth, teams, aiTeam, minValue );
+   }  
+   else
+   {
+      //Get the opponent team
+      if ( opponentTeam == "black" )
+      {
+         team = &teams.black;
+      }
+      else
+      {
+         team = &teams.white;
+      }
+
+      //Are kills possible?
+      canKill = canTeamKill( opponentTeam, teams.black, teams.white );
+
+      if ( canKill )
+      {
+         std::cout << "Max kill moves\n";
+
+         //Only look at pieces that can kill for moves
+         for ( i = 0 ; i < team -> size() ; i++ )
+         {
+            if ( hasKillMoves( team -> at(i), teams.black, teams.white ) )
+            {
+               piece = &team -> at(i);
+
+               //Get all kill moves for this piece
+               moveCount = getKillMoves( newPositions, newMovePointCount, *piece, teams.black, teams.white, piece -> getBoardXPos(), piece -> getBoardYPos() );
+
+               //Get databases for these move
+               for ( j = 0 ; j < moveCount ; j++ )
+               {
+                  unsigned int temp = minValue;
+                  bool king = false;
+
+                  //Get newTeams
+                  newTeams = teams;
+                  newTeams.chainKill = false;
+                  newTeams.chainKillPiece = nullptr;
+                  
+                  //Move the moving piece to the end of their move
+                  pieceDatabase = getStoneFromPosition( piece -> getBoardXPos(), piece -> getBoardYPos(), newTeams.black, newTeams.white );
+                  pieceDatabase -> setBoardPosition( newPositions[j][ newMovePointCount[j] - 1 ].x, newPositions[j][ newMovePointCount[j] - 1 ].y );
+
+                  king = pieceDatabase -> isKing();
+
+                  pieceKill = getStoneFromPosition( newPositions[j][0].x, newPositions[j][0].y, newTeams.black, newTeams.white );
+                  pieceKill -> kill();
+
+                  removeDeadPieces( newTeams.black, newTeams.white );
+
+                  //Check for chain kill
+                  if ( king == pieceDatabase -> isKing() )
+                  {
+                     if ( hasKillMoves( *pieceDatabase, newTeams.black, newTeams.white ) )
+                     {
+                        newTeams.chainKill = true;
+                        newTeams.chainKillPiece = pieceDatabase;
+
+                        //Call chain kill min
+                        minValue = std::min( minValue, aiMinChainKill( depth, newTeams, aiTeam, minValue ) );
+                     }
+                  }
+
+                  if ( !newTeams.chainKill )
+                  {
+                     //Call max for this database
+                     minValue = std::min( minValue, aiMax( depth + 1, newTeams, aiTeam, nullptr, false ) );
+                  }
+               }
+            }
+         }
+      }
+      else
+      {
+         std::cout << "Default min moves\n";
+
+         //Look at EVERY piece for moves
+         for ( i = 0 ; i < team -> size() ; i++ )
+         {
+            piece = &team -> at(i);
+
+            //Get all moves for this piece
+            moveCount = getMovePositions( newPositions, newMovePointCount, *piece, teams.black, teams.white );
+
+            //Get databases for these move
+            for ( j = 0 ; j < moveCount ; j++ )
+            {
+               unsigned int temp = minValue;
+
+               //Get newTeams
+               newTeams = teams;
+               newTeams.chainKill = false;
+               newTeams.chainKillPiece = nullptr;
+               
+               //Move the moving piece to the end of their move
+               pieceDatabase = getStoneFromPosition( piece -> getBoardXPos(), piece -> getBoardYPos(), newTeams.black, newTeams.white );
+               pieceDatabase -> setBoardPosition( newPositions[j][ newMovePointCount[j] - 1 ].x, newPositions[j][ newMovePointCount[j] - 1 ].y );
+
+               //Call min for this database
+               minValue = std::min( minValue, aiMax( depth + 1, newTeams, aiTeam, nullptr, false ) );
+            }
+         }
+      }
+   }
+
+   //Return the min utility value
+   return minValue;
+}
+
+unsigned int aiMaxChainKill( 
+   unsigned int depth,
+   struct teamDatabase teams, 
+   std::string aiTeam,
+   move* finalMove, bool first,
+   unsigned int maxValue )
+{
+   sf::Vector2i newPositions[MAX_POSSIBLE_MOVES][MAX_MOVE_POINTS];
+   unsigned int newMovePointCount[MAX_POSSIBLE_MOVES];
+  
+   sf::Vector2i maxPosition[MAX_MOVE_POINTS];
+   unsigned int maxPointCount;
+   sf::Vector2i position;  //Piece to move position
+
+   struct teamDatabase newTeams;
+   stone* piece;  //Current piece to look at moves for
+   stone* pieceDatabase, *pieceKill;  //Piece to mess with in the database
+
+   unsigned int moveCount;
+   unsigned int i, j, k;
+
+   piece = teams.chainKillPiece;
+
+   //Only look at kill moves for this one piece
+   moveCount = getKillMoves( newPositions, newMovePointCount, *piece, teams.black, teams.white, piece -> getBoardXPos(), piece -> getBoardYPos() );
+
+   //Get databases for these move
+   for ( j = 0 ; j < moveCount ; j++ )
+   {
+      unsigned int temp = maxValue;
+      bool king = false;
+
+      //Get newTeams
+      newTeams = teams;
+      newTeams.chainKill = false;
+      newTeams.chainKillPiece = nullptr;
+      
+      //Move the moving piece to the end of their move
+      pieceDatabase = getStoneFromPosition( piece -> getBoardXPos(), piece -> getBoardYPos(), newTeams.black, newTeams.white );
+      pieceDatabase -> setBoardPosition( newPositions[j][ newMovePointCount[j] - 1 ].x, newPositions[j][ newMovePointCount[j] - 1 ].y );
+
+      king = pieceDatabase -> isKing();
+
+      //Kill the piece
+      pieceKill = getStoneFromPosition( newPositions[j][0].x, newPositions[j][0].y, newTeams.black, newTeams.white );
+      pieceKill -> kill();
+
+      removeDeadPieces( newTeams.black, newTeams.white );
+
+      //Check for chain kill
+      if ( king == ( pieceDatabase -> isKing() ) )
+      {
+         if ( hasKillMoves( *pieceDatabase, newTeams.black, newTeams.white ) )
+         {
+            newTeams.chainKill = true;
+            newTeams.chainKillPiece = pieceDatabase;
+
+            maxValue = std::max( maxValue, aiMaxChainKill( depth, newTeams, aiTeam, finalMove, first, maxValue ) );
+         }
+      }
+
+      if ( !newTeams.chainKill )
+      {
+         //Call min for this database
+         maxValue = std::max( maxValue, aiMin( depth + 1, newTeams, aiTeam ) );
+
+         if ( first && maxValue != temp )
+         {
+            //Get the best move positions
+            finalMove -> goalPosition.x = newPositions[j][newMovePointCount[j] - 1].x;
+            finalMove -> goalPosition.y = newPositions[j][newMovePointCount[j] - 1].y;
+
+            //Piece to moves position
+            finalMove -> piecePosition.x = piece -> getBoardXPos();
+            finalMove -> piecePosition.y = piece -> getBoardYPos();
+         }
+      }
+   }
+
+   return maxValue;
+}
+
+unsigned int aiMinChainKill( 
+   unsigned int depth,
+   struct teamDatabase teams, 
+   std::string aiTeam,
+   unsigned int minValue )
+{
+   sf::Vector2i newPositions[MAX_POSSIBLE_MOVES][MAX_MOVE_POINTS];
+   unsigned int newMovePointCount[MAX_POSSIBLE_MOVES];
+  
+   sf::Vector2i position;  //Piece to move position
+
+   struct teamDatabase newTeams;
+   stone* piece;  //Current piece to look at moves for
+   stone* pieceDatabase, *pieceKill;  //Piece to mess with in the database
+
+   unsigned int moveCount;
+   unsigned int j;
+
+   piece = teams.chainKillPiece;
+
+   //Only look at kill moves for this one piece
+   moveCount = getKillMoves( newPositions, newMovePointCount, *piece, teams.black, teams.white, piece -> getBoardXPos(), piece -> getBoardYPos() );
+
+   //Get databases for these move
+   for ( j = 0 ; j < moveCount ; j++ )
+   {
+      unsigned int temp = minValue;
+      bool king = false;
+
+      //Get newTeams
+      newTeams = teams;
+      newTeams.chainKill = false;
+      newTeams.chainKillPiece = nullptr;
+      
+      //Move the moving piece to the end of their move
+      pieceDatabase = getStoneFromPosition( piece -> getBoardXPos(), piece -> getBoardYPos(), newTeams.black, newTeams.white );
+      pieceDatabase -> setBoardPosition( newPositions[j][ newMovePointCount[j] - 1 ].x, newPositions[j][ newMovePointCount[j] - 1 ].y );
+
+      king = pieceDatabase -> isKing();
+
+      //Kill the piece
+      pieceKill = getStoneFromPosition( newPositions[j][0].x, newPositions[j][0].y, newTeams.black, newTeams.white );
+      pieceKill -> kill();
+
+      removeDeadPieces( newTeams.black, newTeams.white );
+
+      //Check for chain kill
+      if ( king == ( pieceDatabase -> isKing() ) )
+      {
+         if ( hasKillMoves( *pieceDatabase, newTeams.black, newTeams.white ) )
+         {
+            newTeams.chainKill = true;
+            newTeams.chainKillPiece = pieceDatabase;
+
+            minValue = std::min( minValue, aiMinChainKill( depth, newTeams, aiTeam, minValue ) );
+         }
+      }
+
+      if ( !newTeams.chainKill )
+      {
+         //Call min for this database
+         minValue = std::min( minValue, aiMax( depth + 1, newTeams, aiTeam, nullptr, false ) );
+      }
+   }
+
+   return minValue;
+}
+
+//Returns the utility value of the white or black team
+//This value is determined by weighted piece points
+//Param:
+//teams - The database for the current teams
+//team - Team to determine value for
+unsigned int getTeamUtilityValue( struct teamDatabase* teams, std::string team )
+{
+   unsigned int weightPiece, weightKing, value;
+   unsigned int i;
+
+   weightPiece = 1;
+   weightKing = 2;
+
+   value = 0;
+   i = 0;
+
+   //Add up the weighted value of every piece in the black team
+   for ( i = 0 ; i < teams -> black.size() ; i++ )
+   {
+      if ( teams -> black.at(i).isKing() )
+      {
+         value += weightKing;
+      }
+      else
+      {
+         value += weightPiece;
+      }
+   }
+
+   teams -> valueBlack = value;
+
+   value = 0;
+   i = 0;
+
+   //Add up the weighted value of every piece in the white team
+   for ( i = 0 ; i < teams -> white.size() ; i++ )
+   {
+      if ( teams -> white.at(i).isKing() )
+      {
+         value += weightKing;
+      }
+      else
+      {
+         value += weightPiece;
+      }
+   }
+
+   teams -> valueWhite = value;
+
+   if ( team == "black" )
+   {
+      teams -> value = teams -> valueBlack - teams -> valueWhite;
+
+      std::cout << teams -> value << " ???\n";
+   }
+   else
+   {
+      teams -> value = teams -> valueWhite - teams -> valueBlack;
+   }
+
+   return teams -> value;
 }
 
 //Returns true if this position on the board is free
@@ -932,17 +1660,48 @@ unsigned int getKillMoves(
    return moveCount;
 }
 
+//Returns the positions of pieces that can kill
+//Param:
+//black - The array of black pieces
+//white - The array of white pieces
+//killspots - Array of positions for kills
+//currentTurn - The team whose turn it is
+unsigned int getPiecesThatCanKill( std::vector<stone>& black, std::vector<stone>& white, sf::Vector2f *killSpots, std::string& currentTurn )
+{
+   int i, index;
+   std::vector<stone>* team;
+
+   i = 0;
+   index = 0;
+
+   if ( currentTurn == "black" )
+   {
+      team = &black;
+   }
+   else
+   {
+      team = &white;
+   }
+
+   for ( i = 0 ; i < team -> size() ; i++ )
+   {
+      if ( hasKillMoves( team -> at(i), black, white ) )
+      {
+         killSpots[index] = team -> at(i).getPosition();
+
+         index++;
+      }
+   }
+
+   return index;
+}
+
 //Returns true if piece has kill moves
 //Param:
-//positions - The array of x and y positions for possible moves
-//movePointCount - The number of points in a move
 //piece - The piece to check the possible kill moves for
 //black - The array of black pieces
 //white - The array of white pieces
-bool hasKillMoves( 
-   sf::Vector2i positions[MAX_POSSIBLE_MOVES][MAX_MOVE_POINTS], 
-   unsigned int movePointCount[MAX_POSSIBLE_MOVES],
-   stone piece, std::vector<stone>& black, std::vector<stone>& white )
+bool hasKillMoves( stone piece, std::vector<stone>& black, std::vector<stone>& white )
 {
    //Get my piece information
    bool king;
@@ -1004,6 +1763,39 @@ bool hasKillMoves(
                return true;
             }
          }
+   }
+
+   return false;
+}
+
+//Returns true if the chosen team can kill
+//Param:
+//teamName - "black" or "white"
+//black - The array of black pieces
+//white - The array of white pieces
+bool canTeamKill( std::string teamName, std::vector<stone>& black, std::vector<stone>& white )
+{
+   std::vector<stone>* team;
+   unsigned int i;
+
+   i = 0;
+
+   if ( teamName == "black" )
+   {
+      team = &black;
+   }
+   else
+   {
+      team = &white;
+   }
+
+   //Check all pieces for a kill move
+   for ( i = 0 ; i < team -> size() ; i++ )
+   {
+      if ( hasKillMoves( team -> at(i), black, white ) )
+      {
+         return true;
+      }
    }
 
    return false;
