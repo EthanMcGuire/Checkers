@@ -21,7 +21,7 @@ const int BOARD_ORIGIN_Y = WINDOW_HEIGHT / 2 - BOARD_SIZE / 2;
 const int BOARD_SQUARE_SIZE = 72;
 const int BOARD_SQUARE_OFFSET = 8;
 const int PIECE_OFFSET = 4;   //Offset for a stone/piece from the top left corner of a square
-const int WHITE_PLAYER_ROW_OFFSET = 5; //5 rows down from the last black row
+const int BOTTOM_PLAYER_ROW_OFFSET = 5; //5 rows down from the last black row
 const int ROW_SIZE = 4;  //4 pieces started in a row
 const int COLUMN_SIZE = 3;   //3 pieces started in a column (per player)
 const int BOARD_RANGE_LOW = 0;   //The low and high range of squares on the board
@@ -156,13 +156,18 @@ enum states
 
 //Database
 //For keeping track of teams on the board
+//8 by 8 arrays
+//Represents points on the board
+//Values for each team:
+//0 - No piece
+//1 - Pawn
+//2 - King
 struct teamDatabase
 {
-   std::vector<stone> black;
-   std::vector<stone> white;
-   unsigned int valueBlack, valueWhite, value;
-   bool chainKill;   //Whether a kill is available after reaching this database
-   stone* chainKillPiece;
+   unsigned int blackTeam[BOARD_RANGE_HIGH + 1][BOARD_RANGE_HIGH + 1] {0};
+   unsigned int whiteTeam[BOARD_RANGE_HIGH + 1][BOARD_RANGE_HIGH + 1] {0};
+   std::string blackDir;
+   std::string whiteDir;
 };
 
 struct move
@@ -170,42 +175,50 @@ struct move
    sf::Vector2i piecePosition, goalPosition;
 };
 
+template <typename T> int sgn(T val) {
+    return (T(0) < val) - (val < T(0));
+}
+
 bool inRange( unsigned int value, unsigned int low, unsigned int high );
 sf::Vector2f interpolate( sf::Vector2f pointA, sf::Vector2f pointB, float speed );
+
+int createTeam( std::vector<stone>& team, std::string teamColor, std::string teamDir, sf::Texture& texture, sf::Texture* textureKing );
 
 void getNextTurn( std::string& currentTurn, bool& canKill, std::vector<stone>& black, std::vector<stone>& white );
 
 void getAIMove( 
    move* finalMove,
-   std::vector<stone>& black, std::vector<stone>& white, sf::Vector2i& piecePosition,
-   std::string aiTeam,
-   bool chainKill, stone* chainKillPiece );
+   std::vector<stone>& black, std::vector<stone>& white,
+   std::string aiTeam, std::string blackDir, std::string whiteDir );
 
-unsigned int aiMax( 
+int aiMax( 
    unsigned int depth,
    struct teamDatabase teams, 
-   std::string aiTeam,
-   move* finalMove, bool first );
+   std::string aiTeam );
 
-unsigned int aiMin( 
+int aiMin( 
    unsigned int depth,
    struct teamDatabase teams,
    std::string aiTeam );
 
-unsigned int aiMaxChainKill( 
-   unsigned int depth,
-   struct teamDatabase teams, 
-   std::string aiTeam,
-   move* finalMove, bool first,
-   unsigned int maxValue );
+int getTeamUtilityValue( struct teamDatabase* teams, std::string team );
+void getNewDatabases( std::vector<teamDatabase>& newTeams, struct teamDatabase teams, std::string teamColor );
 
-unsigned int aiMinChainKill( 
-   unsigned int depth,
-   struct teamDatabase teams, 
-   std::string aiTeam,
-   unsigned int minValue );
+void performDatabaseMove( 
+   std::vector<teamDatabase>& newTeams, 
+   unsigned int teamMove[BOARD_RANGE_HIGH + 1][BOARD_RANGE_HIGH + 1], 
+   unsigned int teamOther[BOARD_RANGE_HIGH + 1][BOARD_RANGE_HIGH + 1],
+   std::string teamColor, std::string teamDir, std::string teamDirOther,
+   unsigned int boardX, unsigned int boardY,
+   int moveX, int moveY );
+  
+void databaseChainKill( std::vector<teamDatabase>& newTeams, 
+   unsigned int teamMove[BOARD_RANGE_HIGH + 1][BOARD_RANGE_HIGH + 1], 
+   unsigned int teamOther[BOARD_RANGE_HIGH + 1][BOARD_RANGE_HIGH + 1],
+   std::string teamColor, std::string teamDir, std::string teamDirOther,
+   unsigned int boardX, unsigned int boardY );
 
-unsigned int getTeamUtilityValue( struct teamDatabase* teams, std::string team );
+bool databaseGameEnd( struct teamDatabase* teams );
 
 bool isPositionFree( unsigned int x, unsigned int y, std::vector<stone>& black, std::vector<stone>& white );
 stone* getStoneFromPosition( unsigned int x, unsigned int y, std::vector<stone>& black, std::vector<stone>& white );
