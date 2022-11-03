@@ -34,7 +34,7 @@ const int MAX_POSSIBLE_MOVES = 4;   //Max 4 possible moves for a single checkers
 const int MAX_MOVE_POINTS = 2;  //2 possible points in 1 moves (killing a piece is 2 points)
 
 //AI
-const int MAX_DEPTH = 3;  //Max depth for minimax
+const int MAX_DEPTH = 7;  //Max depth for minimax
 
 //Files
 const std::string SND_MUSIC = "Audio\\musicDanseMacabre.ogg";
@@ -154,6 +154,11 @@ enum states
    gameOver
 };
 
+struct move
+{
+   sf::Vector2i piecePosition, goalPosition;
+};
+
 //Database
 //For keeping track of teams on the board
 //8 by 8 arrays
@@ -168,11 +173,7 @@ struct teamDatabase
    unsigned int whiteTeam[BOARD_RANGE_HIGH + 1][BOARD_RANGE_HIGH + 1] {0};
    std::string blackDir;
    std::string whiteDir;
-};
-
-struct move
-{
-   sf::Vector2i piecePosition, goalPosition;
+   struct move startMove;
 };
 
 template <typename T> int sgn(T val) {
@@ -194,7 +195,8 @@ void getAIMove(
 int aiMax( 
    unsigned int depth,
    struct teamDatabase teams, 
-   std::string aiTeam );
+   struct teamDatabase* finalDatabase,
+   std::string aiTeam, bool first );
 
 int aiMin( 
    unsigned int depth,
@@ -210,13 +212,14 @@ void performDatabaseMove(
    unsigned int teamOther[BOARD_RANGE_HIGH + 1][BOARD_RANGE_HIGH + 1],
    std::string teamColor, std::string teamDir, std::string teamDirOther,
    unsigned int boardX, unsigned int boardY,
-   int moveX, int moveY );
+   int moveX, int moveY,
+   bool canKill );
   
 void databaseChainKill( std::vector<teamDatabase>& newTeams, 
    unsigned int teamMove[BOARD_RANGE_HIGH + 1][BOARD_RANGE_HIGH + 1], 
    unsigned int teamOther[BOARD_RANGE_HIGH + 1][BOARD_RANGE_HIGH + 1],
    std::string teamColor, std::string teamDir, std::string teamDirOther,
-   unsigned int boardX, unsigned int boardY );
+   unsigned int startX, unsigned int startY, unsigned int goalX, unsigned int goalY, unsigned int boardX, unsigned int boardY );
 
 bool databaseGameEnd( struct teamDatabase* teams );
 
