@@ -34,7 +34,7 @@ const int MAX_POSSIBLE_MOVES = 4;   //Max 4 possible moves for a single checkers
 const int MAX_MOVE_POINTS = 2;  //2 possible points in 1 moves (killing a piece is 2 points)
 
 //AI
-const int MAX_DEPTH = 7;  //Max depth for minimax
+const int MAX_DEPTH = 5;  //Max depth for minimax
 
 //Files
 const std::string SND_MUSIC = "Audio\\musicDanseMacabre.ogg";
@@ -187,7 +187,7 @@ int createTeam( std::vector<stone>& team, std::string teamColor, std::string tea
 
 void getNextTurn( std::string& currentTurn, bool& canKill, std::vector<stone>& black, std::vector<stone>& white );
 
-void getAIMove( 
+unsigned int getAIMove( 
    move* finalMove,
    std::vector<stone>& black, std::vector<stone>& white,
    std::string aiTeam, std::string blackDir, std::string whiteDir );
@@ -220,6 +220,11 @@ void databaseChainKill( std::vector<teamDatabase>& newTeams,
    unsigned int teamOther[BOARD_RANGE_HIGH + 1][BOARD_RANGE_HIGH + 1],
    std::string teamColor, std::string teamDir, std::string teamDirOther,
    unsigned int startX, unsigned int startY, unsigned int goalX, unsigned int goalY, unsigned int boardX, unsigned int boardY );
+
+bool checkDatabaseForKills( 
+   unsigned int teamMove[BOARD_RANGE_HIGH + 1][BOARD_RANGE_HIGH + 1], 
+   unsigned int teamOther[BOARD_RANGE_HIGH + 1][BOARD_RANGE_HIGH + 1],
+   std::string teamDir );
 
 bool databaseGameEnd( struct teamDatabase* teams );
 

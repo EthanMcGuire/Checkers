@@ -15,6 +15,8 @@
 //-mwindows
 //ming32-make to compile and link the program
 
+bool cheater = false;
+
 int main()
 {
    ///Declare variables
@@ -76,7 +78,7 @@ int main()
    unsigned int killMoveCount = 0;
    sf::Vector2i movePositions[MAX_POSSIBLE_MOVES][MAX_MOVE_POINTS];   //The coordinates on the board where this piece can move
    unsigned int movePointCount[MAX_POSSIBLE_MOVES];   //The number of points within a move
-   unsigned int moveCount; //Total moves found for a piece
+   unsigned int moveCount, aiMoveCount; //Total moves found for a piece
    bool killChain;   //Whether a kill chain can be executed
 
    //Action Control
@@ -318,7 +320,7 @@ int main()
          move finalMove;
          int moveX, moveY;
 
-         getAIMove( &finalMove, black, white, aiTeam, blackDir, whiteDir );
+         aiMoveCount = getAIMove( &finalMove, black, white, aiTeam, blackDir, whiteDir );
 
          //Get the stone for the selected move
          selectedPiece = getStoneFromPosition( finalMove.piecePosition.x, finalMove.piecePosition.y, black, white );
@@ -343,8 +345,8 @@ int main()
          moveIndex = 0;
          state = startAction;
 
-         std::cout << finalMove.piecePosition.x << finalMove.piecePosition.y << "\n";
-         std::cout << finalMove.goalPosition.x << finalMove.goalPosition.y << "\n";
+         //std::cout << finalMove.piecePosition.x << finalMove.piecePosition.y << "\n";
+         //std::cout << finalMove.goalPosition.x << finalMove.goalPosition.y << "\n";
       }
       else if ( state == startAction )
       {
@@ -756,12 +758,13 @@ void getNextTurn( std::string& currentTurn, bool& canKill, std::vector<stone>& b
 //aiTeam - The team to get a move for (The AI's team)
 //blackDir - black teams direction of movement "up" or "down"
 //whiteDir - black teams direction of movement "up" or "down"
-void getAIMove( 
+unsigned int getAIMove( 
    move* finalMove, 
    std::vector<stone>& black, std::vector<stone>& white,
    std::string aiTeam, std::string blackDir, std::string whiteDir )
 {
    unsigned int i, j;
+   int moveCount = 0;
    int value;
    struct teamDatabase teams, finalDatabase;
    stone* piece;
@@ -795,40 +798,27 @@ void getAIMove(
       teams.whiteTeam[piece -> getBoardXPos()][piece -> getBoardYPos()] = 1 + ( piece -> isKing() );
    }
 
-   /*
-   for ( i = 0 ; i < BOARD_RANGE_HIGH + 1 ; i++ )
-   {
-      for ( j = 0 ; j < BOARD_RANGE_HIGH + 1 ; j++ )
-      {
-         std::cout << teams.blackTeam[j][i] << " ";
-      }
-
-      std::cout << "\n";
-   }
-
-   std::cout << "\n";
-
-   for ( i = 0 ; i < BOARD_RANGE_HIGH + 1 ; i++ )
-   {
-      for ( j = 0 ; j < BOARD_RANGE_HIGH + 1 ; j++ )
-      {
-         std::cout << teams.whiteTeam[j][i] << " ";
-      }
-
-      std::cout << "\n";
-   }
-
-   std::cout << "\n NEXT \n\n"; */
-
    //Get the best database to move to using max
    value = aiMax( 0, teams, &finalDatabase, aiTeam, true );
+
+   std::cout << "Value: " << value << "\n";
 
    finalMove -> piecePosition = finalDatabase.startMove.piecePosition;
    finalMove -> goalPosition = finalDatabase.startMove.goalPosition;
 
-   //std::cout << "Value :" << value << "\n";
+   //If final database wasn't changed (no move can be made, the other team wins)
 
-   return;
+   //Check if finalDatabase == teams
+      //Make a == operator?
+
+   //Cheaters only perform 1 move
+   //A chain kill can cancel out into a new move
+   if ( cheater )
+   {
+      moveCount = std::min( moveCount, 1 );
+   }
+
+   return moveCount;
 }
 
 //Returns the max utility value for every possible move from the teams database
@@ -844,8 +834,6 @@ int aiMax(
    struct teamDatabase* finalDatabase,
    std::string aiTeam, bool first )
 {
-   //std::cout << "MAX START: Depth " << depth << "\n";
-
    //Return the utility value if the game is over or MAX_DEPTH is reached
    if ( databaseGameEnd( &teams ) || depth >= MAX_DEPTH )
    {
@@ -853,7 +841,9 @@ int aiMax(
    }
 
    std::vector<teamDatabase> newTeams;
+   std::vector<int> values;
    unsigned int i, j, k;
+   unsigned int maxIndex = 0;
    int maxValue, temp;
 
    maxValue = -999;
@@ -861,17 +851,34 @@ int aiMax(
    //Get the new teams
    getNewDatabases( newTeams, teams, aiTeam );
 
+   //No moves available?
+   if ( newTeams.size() == 0 )
+   {
+      if ( first )
+      {
+         *finalDatabase = teams;
+      }
+
+      return getTeamUtilityValue( &teams, aiTeam );
+   }
+
+   std::cout << "MAX COUNT***: " << newTeams.size() << "\n";
+
    //Call min on the teams
    for ( i = 0 ; i < newTeams.size() ; i++ )
    {
-      temp = maxValue;
+      temp = aiMin( depth + 1, newTeams.at(i), aiTeam );
       
-      maxValue = std::max( maxValue, aiMin( depth + 1, newTeams.at(i), aiTeam ) );
-
-      if ( first && maxValue != temp )
+      if ( temp > maxValue )
       {
-         *finalDatabase = newTeams.at(i);
+         maxValue = temp;
+         maxIndex = i;
       }
+   }
+
+   if ( first )
+   {
+      *finalDatabase = newTeams.at( maxIndex );
    }
 
    return maxValue;
@@ -887,8 +894,6 @@ int aiMin(
    struct teamDatabase teams,
    std::string aiTeam )
 {
-   //std::cout << "Min START: Depth " << depth << "\n";
-
    //Return the utility value if the game is over or MAX_DEPTH is reached
    if ( databaseGameEnd( &teams ) || depth >= MAX_DEPTH )
    {
@@ -911,6 +916,14 @@ int aiMin(
 
    //Get the new teams
    getNewDatabases( newTeams, teams, enemyTeam );
+
+   //No moves available?
+   if ( newTeams.size() == 0 )
+   {
+      return getTeamUtilityValue( &teams, aiTeam );
+   }
+
+   std::cout << "Min Count: " << newTeams.size() << "\n";
 
    //Call max on the teams
    for ( i = 0 ; i < newTeams.size() ; i++ )
@@ -1014,12 +1027,10 @@ void getNewDatabases( std::vector<teamDatabase>& newTeams, struct teamDatabase t
    }
 
    //Check if kill moves can be performed
-
-   //canKill = checkDatabaseForKills();
-
-   //If so canKill = true
-
-   //Only perform moves that kill
+   if ( !cheater )
+   {
+      canKill = checkDatabaseForKills( teamMove, teamOther, dir );
+   }
 
    //Perform every possible move for each piece
    for ( i = 0 ; i < BOARD_RANGE_HIGH + 1 ; i++ )
@@ -1343,6 +1354,49 @@ void databaseChainKill( std::vector<teamDatabase>& newTeams,
    }
 }
 
+bool checkDatabaseForKills( 
+   unsigned int teamMove[BOARD_RANGE_HIGH + 1][BOARD_RANGE_HIGH + 1], 
+   unsigned int teamOther[BOARD_RANGE_HIGH + 1][BOARD_RANGE_HIGH + 1],
+   std::string teamDir )
+{
+   unsigned int i, j, k;
+   int moveX[4] = { 1, 1, -1, -1 };
+   int moveY[4] = { 1, -1, 1, -1 };
+
+   for ( i = 0 ; i < BOARD_RANGE_HIGH + 1 ; i++ )
+   {
+      for ( j = 0 ; j < BOARD_RANGE_HIGH + 1 ; j++ )
+      {
+         if ( teamMove[i][j] != 0 )
+         {
+            //Check each direction for a kill
+            for ( k = 0 ; k < 4 ; k++ )
+            {
+               //Can this piece move in this direction
+               //Kings move in any direction
+               if ( teamMove[i][j] == 2 || ( ( moveY[k] == 1 && teamDir == "down" ) || ( ( moveY[k] == -1 && teamDir == "up" ) ) ) )
+               //Check if this position is on the board
+               if ( inRange( i + moveX[k] * 2, BOARD_RANGE_LOW, BOARD_RANGE_HIGH ) && inRange( j + moveY[k] * 2, BOARD_RANGE_LOW, BOARD_RANGE_HIGH ) )
+               {
+                  //Enemy in this direction?
+                  if ( teamOther[i + moveX[k]][j + moveY[k]] != 0 )
+                  {
+                     //End space not blocked off?
+                     if ( teamMove[i + moveX[k] * 2][j + moveY[k] * 2] == 0 && teamOther[i + moveX[k] * 2][j + moveY[k] * 2] == 0 )
+                     {
+                        //Kill move can be made
+                        return true;
+                     }
+                  }
+               } 
+            }
+         }
+      }
+   }
+
+   return false;
+}
+
 //Returns true if this team database has reached the game end
 //Either the black or white team are all dead
 //Param:
@@ -1361,13 +1415,13 @@ bool databaseGameEnd( struct teamDatabase* teams )
       for ( j = 0 ; j < BOARD_RANGE_HIGH + 1 ; j++ )
       {
          //Check for alive black pieces
-         if ( teams -> blackTeam[i][j] > 0 )
+         if ( teams -> blackTeam[i][j] != 0 )
          {
             blackDead = false;
          }
 
          //Check for alive white pieces
-         if ( teams -> whiteTeam[i][j] > 0 )
+         if ( teams -> whiteTeam[i][j] != 0 )
          {
             whiteDead = false;
          }
