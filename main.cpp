@@ -9,6 +9,7 @@
 #include <string>
 #include <algorithm>
 #include <math.h>
+#include <time.h>
 
 #include "checkers.hh"
 
@@ -19,6 +20,9 @@ bool cheater = false;
 
 int main()
 {
+   //Randomize
+   srand( time( NULL ) );
+
    ///Declare variables
 
    //Main
@@ -78,7 +82,7 @@ int main()
    unsigned int killMoveCount = 0;
    sf::Vector2i movePositions[MAX_POSSIBLE_MOVES][MAX_MOVE_POINTS];   //The coordinates on the board where this piece can move
    unsigned int movePointCount[MAX_POSSIBLE_MOVES];   //The number of points within a move
-   unsigned int moveCount, aiMoveCount; //Total moves found for a piece
+   unsigned int moveCount; //Total moves found for a piece
    bool killChain;   //Whether a kill chain can be executed
 
    //Action Control
@@ -89,6 +93,9 @@ int main()
    sf::Vector2f actionLength; //The length from action start to goal
    float actionLengthReal;
    stone* pieceToKill;  //The piece to kill for a kill move
+
+   //AI Move
+   std::vector<move> aiMoveList;
 
    //Game timing control
    sf::Clock deltaClock;
@@ -316,37 +323,57 @@ int main()
 
       if ( !twoPlayer && currentTurn != playerTeam && ( state == getAction || state == getChainKill ) )
       {
-         //Get the AI's move
-         move finalMove;
-         int moveX, moveY;
+         //AIs turn
 
-         aiMoveCount = getAIMove( &finalMove, black, white, aiTeam, blackDir, whiteDir );
-
-         //Get the stone for the selected move
-         selectedPiece = getStoneFromPosition( finalMove.piecePosition.x, finalMove.piecePosition.y, black, white );
-
-         //Get the move positions for this move
-         moveX = finalMove.goalPosition.x - finalMove.piecePosition.x;
-         moveY = finalMove.goalPosition.y - finalMove.piecePosition.y;
-
-         //Get the point count in this move
-         movePointCount[0] = std::max( abs( moveX ), abs( moveY ) );
-
-         moveX = sgn(moveX);
-         moveY = sgn(moveY);
-
-         for ( i = 1 ; i <= movePointCount[0] ; i++ )
+         //A chain kill can cancel out into a new move in cheater mode
+         if ( cheater )
          {
-            movePositions[0][i-1].x = finalMove.piecePosition.x + moveX * i;
-            movePositions[0][i-1].y = finalMove.piecePosition.y + moveY * i;
+            while ( aiMoveList.size() > 0 )
+            {
+               aiMoveList.pop_back();
+            }
          }
 
-         selected = false;
-         moveIndex = 0;
-         state = startAction;
+         if ( aiMoveList.size() == 0 )
+         {
+            //Get the move list for this AIs turn
+            getAIMove( &aiMoveList, black, white, aiTeam, blackDir, whiteDir );
+         }
 
-         //std::cout << finalMove.piecePosition.x << finalMove.piecePosition.y << "\n";
-         //std::cout << finalMove.goalPosition.x << finalMove.goalPosition.y << "\n";
+         if ( aiMoveList.size() != 0 )
+         {
+            //Get the AI's next move
+            int moveX, moveY;
+            struct move nextMove;
+
+            nextMove = aiMoveList.at(0);
+
+            //Get the stone for the selected move
+            selectedPiece = getStoneFromPosition( nextMove.piecePosition.x, nextMove.piecePosition.y, black, white );
+
+            //Get the move positions for this move
+            moveX = nextMove.goalPosition.x - nextMove.piecePosition.x;
+            moveY = nextMove.goalPosition.y - nextMove.piecePosition.y;
+
+            //Get the point count in this move
+            movePointCount[0] = std::max( abs( moveX ), abs( moveY ) );
+
+            moveX = sgn(moveX);
+            moveY = sgn(moveY);
+
+            for ( i = 1 ; i <= movePointCount[0] ; i++ )
+            {
+               movePositions[0][i-1].x = nextMove.piecePosition.x + moveX * i;
+               movePositions[0][i-1].y = nextMove.piecePosition.y + moveY * i;
+            }
+
+            selected = false;
+            moveIndex = 0;
+            state = startAction;
+
+            //Remove the move from the vector
+            aiMoveList.erase( aiMoveList.begin() );
+         }
       }
       else if ( state == startAction )
       {
@@ -435,24 +462,36 @@ int main()
                //A kill chain CANNOT be executed once a piece becomes king
                if ( selectedPiece -> isKing() == king )
                {
-                  //Check for kill chains
-                  moveCount = getKillMoves( movePositions, movePointCount, *selectedPiece, black, white, actionPointGoalBoard.x, actionPointGoalBoard.y );
-
-                  if ( moveCount != 0 )
+                  //AI doesn't need this
+                  if ( twoPlayer || currentTurn == playerTeam )
                   {
-                     //Set up move information
+                     //Check for kill chains
+                     moveCount = getKillMoves( movePositions, movePointCount, *selectedPiece, black, white, actionPointGoalBoard.x, actionPointGoalBoard.y );
 
-                     //AI doesn't need this
-                     if ( twoPlayer || currentTurn == playerTeam )
+                     if ( moveCount != 0 )
                      {
-                        //Set the piece highlight on the current pieces location
-                        pieceHighlight.setPosition( selectedPiece -> getPosition() );
+                        //Set up move information
 
-                        //Check for mouse over this new move
-                        mouseMoveIndex = checkMouseOverMove( movePositions, movePointCount, moveCount, globalMousePosWorld.x, globalMousePosWorld.y );
+                        //AI doesn't need this
+                        if ( twoPlayer || currentTurn == playerTeam )
+                        {
+                           //Set the piece highlight on the current pieces location
+                           pieceHighlight.setPosition( selectedPiece -> getPosition() );
+
+                           //Check for mouse over this new move
+                           mouseMoveIndex = checkMouseOverMove( movePositions, movePointCount, moveCount, globalMousePosWorld.x, globalMousePosWorld.y );
+                        }
+
+                        killChain = true;
                      }
-
-                     killChain = true;
+                  }
+                  else
+                  {
+                     //For AI, just check if they have remaining moves
+                     if ( aiMoveList.size() != 0 )
+                     {
+                        killChain = true;
+                     }
                   }
                }
             }
@@ -481,6 +520,28 @@ int main()
                {
                   winner = "Black";
                   state = gameOver;
+               }
+               else
+               {
+                  std::string otherTeam;
+
+                  if ( currentTurn == "black" )
+                  {
+                     otherTeam = "white";
+                  }
+                  else
+                  {
+                     otherTeam = "black";
+                  }
+
+                  //Check if the other team is softlocked
+                  if ( !canTeamKill( otherTeam, black, white ) && !canTeamMove( otherTeam, black, white ) )
+                  {
+                     //Game over
+                     winner = currentTurn;
+                     winner[0] = toupper( winner[0] );
+                     state = gameOver;
+                  }
                }
 
                selectedPiece = nullptr;
@@ -603,15 +664,19 @@ int main()
       }
       else
       {
-         if ( state == getAction )
+         //Only highlight for non-AI players
+         if ( twoPlayer || currentTurn == playerTeam )
          {
-            //Highlight pieces that can kill
-            if ( canKill )
+            if ( state == getAction )
             {
-               for ( i = 0 ; i < killMoveCount ; i++ )
+               //Highlight pieces that can kill
+               if ( canKill )
                {
-                  canKillHighlight.setPosition( killSpots[i] );
-                  window.draw( canKillHighlight );
+                  for ( i = 0 ; i < killMoveCount ; i++ )
+                  {
+                     canKillHighlight.setPosition( killSpots[i] );
+                     window.draw( canKillHighlight );
+                  }
                }
             }
          }
@@ -647,6 +712,26 @@ bool inRange( unsigned int value, unsigned int low, unsigned int high )
         return true;
 
     return false;
+}
+
+//Checks if the x, y position is within the boards bounds
+//Returns true if so
+//Param:
+//x - x position on board
+//y - y position on board
+bool inBounds( unsigned int x, unsigned int y )
+{
+   if ( !inRange( x, BOARD_RANGE_LOW, BOARD_RANGE_HIGH ) )
+   {
+      return false;
+   }
+
+   if ( !inRange( y, BOARD_RANGE_LOW, BOARD_RANGE_HIGH ) )
+   {
+      return false;
+   }
+
+   return true;
 }
 
 //Returns the distance moved from pointA to pointB by speed
@@ -752,14 +837,14 @@ void getNextTurn( std::string& currentTurn, bool& canKill, std::vector<stone>& b
 
 //Gets the next move for the AI using the getTeamUtilityValue and min/max functions
 //Param:
-//finalMove - Move to perform
+//moveList - List of moves to perform
 //black - The array of black pieces
 //white - The array of white pieces
 //aiTeam - The team to get a move for (The AI's team)
 //blackDir - black teams direction of movement "up" or "down"
 //whiteDir - black teams direction of movement "up" or "down"
-unsigned int getAIMove( 
-   move* finalMove, 
+void getAIMove( 
+   std::vector<move>* moveList, 
    std::vector<stone>& black, std::vector<stone>& white,
    std::string aiTeam, std::string blackDir, std::string whiteDir )
 {
@@ -801,24 +886,18 @@ unsigned int getAIMove(
    //Get the best database to move to using max
    value = aiMax( 0, teams, &finalDatabase, aiTeam, true );
 
-   std::cout << "Value: " << value << "\n";
-
-   finalMove -> piecePosition = finalDatabase.startMove.piecePosition;
-   finalMove -> goalPosition = finalDatabase.startMove.goalPosition;
-
-   //If final database wasn't changed (no move can be made, the other team wins)
-
-   //Check if finalDatabase == teams
-      //Make a == operator?
-
-   //Cheaters only perform 1 move
-   //A chain kill can cancel out into a new move
-   if ( cheater )
+   //Confirm a move is possible
+   if ( finalDatabase.moves.size() > 0 )
    {
-      moveCount = std::min( moveCount, 1 );
+      //Get the move list
+      *moveList = finalDatabase.moves;
+   }
+   else
+   {
+      moveList -> clear();
    }
 
-   return moveCount;
+   std::cout << value << " Value\n";
 }
 
 //Returns the max utility value for every possible move from the teams database
@@ -837,7 +916,9 @@ int aiMax(
    //Return the utility value if the game is over or MAX_DEPTH is reached
    if ( databaseGameEnd( &teams ) || depth >= MAX_DEPTH )
    {
-      return getTeamUtilityValue( &teams, aiTeam );
+      int value = getTeamUtilityValue( &teams, aiTeam );
+
+      return value;
    }
 
    std::vector<teamDatabase> newTeams;
@@ -859,10 +940,12 @@ int aiMax(
          *finalDatabase = teams;
       }
 
-      return getTeamUtilityValue( &teams, aiTeam );
+      int value = getTeamUtilityValue( &teams, aiTeam );
+
+      return value;
    }
 
-   std::cout << "MAX COUNT***: " << newTeams.size() << "\n";
+   //std::cout << "MAX COUNT***: " << newTeams.size() << "\n";
 
    //Call min on the teams
    for ( i = 0 ; i < newTeams.size() ; i++ )
@@ -923,7 +1006,7 @@ int aiMin(
       return getTeamUtilityValue( &teams, aiTeam );
    }
 
-   std::cout << "Min Count: " << newTeams.size() << "\n";
+   //std::cout << "Min Count: " << newTeams.size() << "\n";
 
    //Call max on the teams
    for ( i = 0 ; i < newTeams.size() ; i++ )
@@ -946,13 +1029,13 @@ int getTeamUtilityValue( struct teamDatabase* teams, std::string team )
    int black, white;
    unsigned int i, j;
 
-   weightPiece = 1;
-   weightKing = 2;
+   weightPiece = 3;
+   weightKing = 6;
 
    blackValue = 0;
    whiteValue = 0;
 
-   //Get the value of each time for every piece on the board
+   //Get the value of for every piece on the board
    for ( i = 0 ; i < BOARD_RANGE_HIGH + 1 ; i++ )
    {
       for ( j = 0 ; j < BOARD_RANGE_HIGH + 1 ; j++ )
@@ -980,6 +1063,16 @@ int getTeamUtilityValue( struct teamDatabase* teams, std::string team )
       }
    }
 
+   //Check how far each piece is on the board
+
+
+   //Add value to the team with more pieces
+      //This position is favoured for trades
+      //+3
+
+   //Check if a team has lost (either by having no pieces or being softlocked)
+      //+10 to the winning team
+
    //Get the final utitility value for this team
    if ( team == "black" )
    {
@@ -990,6 +1083,8 @@ int getTeamUtilityValue( struct teamDatabase* teams, std::string team )
       value = whiteValue - blackValue;
    }
    
+   value += ( rand() % 5 ) - 2;  //Add -2, -1, 0, 1, or 2 for randomness
+
    return value;
 }
 
@@ -1010,8 +1105,8 @@ void getNewDatabases( std::vector<teamDatabase>& newTeams, struct teamDatabase t
    if ( teamColor == "black" )
    {
       //Black teams move
-      std::copy( &teams.blackTeam[0][0], &teams.blackTeam[0][0] + ( BOARD_RANGE_HIGH + 1 ) * ( BOARD_RANGE_HIGH + 1 ), &teamMove[0][0] );
-      std::copy( &teams.whiteTeam[0][0], &teams.whiteTeam[0][0] + ( BOARD_RANGE_HIGH + 1 ) * ( BOARD_RANGE_HIGH + 1 ), &teamOther[0][0] );
+      std::copy( &teams.blackTeam[0][0], &teams.blackTeam[0][0] + (int) pow( BOARD_RANGE_HIGH + 1, 2 ), &teamMove[0][0] );
+      std::copy( &teams.whiteTeam[0][0], &teams.whiteTeam[0][0] + (int) pow( BOARD_RANGE_HIGH + 1, 2 ), &teamOther[0][0] );
 
       dir = teams.blackDir;
       dirOther = teams.whiteDir;
@@ -1019,8 +1114,8 @@ void getNewDatabases( std::vector<teamDatabase>& newTeams, struct teamDatabase t
    else
    {
       //White teams move
-      std::copy( &teams.whiteTeam[0][0], &teams.whiteTeam[0][0] + ( BOARD_RANGE_HIGH + 1 ) * ( BOARD_RANGE_HIGH + 1 ), &teamMove[0][0] );
-      std::copy( &teams.blackTeam[0][0], &teams.blackTeam[0][0] + ( BOARD_RANGE_HIGH + 1 ) * ( BOARD_RANGE_HIGH + 1 ), &teamOther[0][0] );
+      std::copy( &teams.whiteTeam[0][0], &teams.whiteTeam[0][0] + (int) pow( BOARD_RANGE_HIGH + 1, 2 ), &teamMove[0][0] );
+      std::copy( &teams.blackTeam[0][0], &teams.blackTeam[0][0] + (int) pow( BOARD_RANGE_HIGH + 1, 2 ), &teamOther[0][0] );
 
       dir = teams.whiteDir;
       dirOther = teams.blackDir;
@@ -1033,9 +1128,9 @@ void getNewDatabases( std::vector<teamDatabase>& newTeams, struct teamDatabase t
    }
 
    //Perform every possible move for each piece
-   for ( i = 0 ; i < BOARD_RANGE_HIGH + 1 ; i++ )
+   for ( i = 0 ; i <= BOARD_RANGE_HIGH ; i++ )
    {
-      for ( j = 0 ; j < BOARD_RANGE_HIGH + 1 ; j++ )
+      for ( j = 0 ; j <= BOARD_RANGE_HIGH ; j++ )
       {
          if ( teamMove[i][j] != 0 )
          {
@@ -1081,7 +1176,7 @@ void performDatabaseMove(
 {
    bool addToDatabase = false;
 
-   if ( !inRange( boardX + moveX, BOARD_RANGE_LOW, BOARD_RANGE_HIGH ) || !inRange( boardY + moveY, BOARD_RANGE_LOW, BOARD_RANGE_HIGH ) )
+   if ( !inBounds( boardX + moveX, boardY + moveY ) )
    {
       //Move out of range
       return;
@@ -1106,8 +1201,8 @@ void performDatabaseMove(
    unsigned int teamMoveTemp[BOARD_RANGE_HIGH + 1][BOARD_RANGE_HIGH + 1];
    unsigned int teamOtherTemp[BOARD_RANGE_HIGH + 1][BOARD_RANGE_HIGH + 1];
 
-   std::copy( &teamMove[0][0], &teamMove[0][0] + ( BOARD_RANGE_HIGH + 1 ) * ( BOARD_RANGE_HIGH + 1 ), &teamMoveTemp[0][0] );
-   std::copy( &teamOther[0][0], &teamOther[0][0] + ( BOARD_RANGE_HIGH + 1 ) * ( BOARD_RANGE_HIGH + 1 ), &teamOtherTemp[0][0] );
+   std::copy( &teamMove[0][0], &teamMove[0][0] + (int) pow( BOARD_RANGE_HIGH + 1, 2 ), &teamMoveTemp[0][0] );
+   std::copy( &teamOther[0][0], &teamOther[0][0] + (int) pow( BOARD_RANGE_HIGH + 1, 2 ), &teamOtherTemp[0][0] );
 
    //Check if this position is free
    if ( teamMoveTemp[boardX + moveX][boardY + moveY] == 0 && teamOtherTemp[boardX + moveX][boardY + moveY] == 0 )
@@ -1118,6 +1213,19 @@ void performDatabaseMove(
          teamMoveTemp[boardX + moveX][boardY + moveY] = teamMoveTemp[boardX][boardY];
          teamMoveTemp[boardX][boardY] = 0;
 
+         //Check if this piece became king
+         if ( teamMoveTemp[boardX + moveX][boardY + moveY] != 2 )
+         {
+            if ( teamDir == "up" && ( boardY + moveY ) == BOARD_RANGE_LOW )
+            {
+               teamMoveTemp[boardX + moveX][boardY + moveY] = 2;
+            }
+            else if ( teamDir == "down" && ( boardY + moveY ) == BOARD_RANGE_HIGH )
+            {
+               teamMoveTemp[boardX + moveX][boardY + moveY] = 2;
+            }
+         }
+
          addToDatabase = true;
       }
    }
@@ -1126,20 +1234,16 @@ void performDatabaseMove(
       //Check if an enemy piece is in the way
       if ( teamOtherTemp[boardX + moveX][boardY + moveY] != 0 )
       {
-         if ( inRange( boardX + moveX * 2, BOARD_RANGE_LOW, BOARD_RANGE_HIGH ) && inRange( boardY + moveY * 2, BOARD_RANGE_LOW, BOARD_RANGE_HIGH ) )
+         if ( inBounds( boardX + moveX * 2, boardY + moveY * 2 ) )
          {
             //Check if the land position is free
             if ( teamMoveTemp[boardX + moveX * 2][boardY + moveY * 2] == 0 && teamOtherTemp[boardX + moveX * 2][boardY + moveY * 2] == 0 )
             {
-               //Kill the piece
-               teamOtherTemp[boardX + moveX][boardY + moveY] = 0;
+               //Prepare the database for the chain kill
+               struct teamDatabase nextTeam;
 
-               //Move the piece
-               teamMoveTemp[boardX + moveX * 2][boardY + moveY * 2] = teamMoveTemp[boardX][boardY];
-               teamMoveTemp[boardX][boardY] = 0;
-
-               //Check for chain kill
-               databaseChainKill( newTeams, teamMoveTemp, teamOtherTemp, teamColor, teamDir, teamDirOther, boardX, boardY, boardX + moveX * 2, boardY + moveY * 2, boardX + moveX * 2, boardY + moveY * 2 );
+               //Check for chain kill and perform the kill move
+               databaseChainKill( newTeams, nextTeam, teamMoveTemp, teamOtherTemp, teamColor, teamDir, teamDirOther, boardX, boardY, boardX + moveX * 2, boardY + moveY * 2 );
             }
          }
       }
@@ -1149,27 +1253,31 @@ void performDatabaseMove(
    if ( addToDatabase )
    {
       struct teamDatabase next;
+      struct move nextMove;
 
       //Check the moving team color
       if ( teamColor == "black" )
       {
-         std::copy( &teamMoveTemp[0][0], &teamMoveTemp[0][0]  + ( BOARD_RANGE_HIGH + 1 ) * ( BOARD_RANGE_HIGH + 1 ), &next.blackTeam[0][0]  );
-         std::copy( &teamOtherTemp[0][0], &teamOtherTemp[0][0]  + ( BOARD_RANGE_HIGH + 1 ) * ( BOARD_RANGE_HIGH + 1 ), &next.whiteTeam[0][0]  );
+         std::copy( &teamMoveTemp[0][0], &teamMoveTemp[0][0]  + (int) pow( BOARD_RANGE_HIGH + 1, 2 ), &next.blackTeam[0][0]  );
+         std::copy( &teamOtherTemp[0][0], &teamOtherTemp[0][0]  + (int) pow( BOARD_RANGE_HIGH + 1, 2 ), &next.whiteTeam[0][0]  );
 
          next.blackDir = teamDir;
          next.whiteDir = teamDirOther;
       }
       else
       {
-         std::copy( &teamMoveTemp[0][0], &teamMoveTemp[0][0]  + ( BOARD_RANGE_HIGH + 1 ) * ( BOARD_RANGE_HIGH + 1 ), &next.whiteTeam[0][0]  );
-         std::copy( &teamOtherTemp[0][0], &teamOtherTemp[0][0]  + ( BOARD_RANGE_HIGH + 1 ) * ( BOARD_RANGE_HIGH + 1 ), &next.blackTeam[0][0]  );
+         std::copy( &teamMoveTemp[0][0], &teamMoveTemp[0][0]  + (int) pow( BOARD_RANGE_HIGH + 1, 2 ), &next.whiteTeam[0][0]  );
+         std::copy( &teamOtherTemp[0][0], &teamOtherTemp[0][0]  + (int) pow( BOARD_RANGE_HIGH + 1, 2 ), &next.blackTeam[0][0]  );
 
          next.whiteDir = teamDir;
          next.blackDir = teamDirOther;
       }
       
-      next.startMove.piecePosition = sf::Vector2i( boardX, boardY );
-      next.startMove.goalPosition = sf::Vector2i( boardX + moveX, boardY + moveY );
+      //Get the specific move info
+      nextMove.piecePosition = sf::Vector2i( boardX, boardY );
+      nextMove.goalPosition = sf::Vector2i( boardX + moveX, boardY + moveY );
+
+      next.moves.push_back( nextMove );
 
       newTeams.push_back( next );
    }
@@ -1181,176 +1289,187 @@ void performDatabaseMove(
 //and adds a new database when no more kills are available
 //Param:
 //newTeams - The vector of teams databases to put the new databases in
+//nextTeam - The next team to get a database chain kill move for
 //teamMove - The database array for the moving team
 //teamOther - The database array for the enemy team
 //teamColor - The current team color whose turn it is
 //teamDir - The current team dir whose turn it is
 //teamDirOther - The dir of the other team
-//startX - The initial x of the moving piece
-//startY - The initial y of the moving piece
-//goalX - The initial x goal of the moving piece
-//goalY - The initial y goal of the moving piece
-//boardX - The x position of the moving piece
-//boardY - The y position of the moving piece
-void databaseChainKill( std::vector<teamDatabase>& newTeams, 
+//startX - The x of the moving piece
+//startY - The y of the moving piece
+//boardX - The landing x position of the moving piece
+//boardY - The landing y position of the moving piece
+void databaseChainKill( 
+   std::vector<teamDatabase>& newTeams, 
+   struct teamDatabase nextTeam, 
    unsigned int teamMove[BOARD_RANGE_HIGH + 1][BOARD_RANGE_HIGH + 1], 
    unsigned int teamOther[BOARD_RANGE_HIGH + 1][BOARD_RANGE_HIGH + 1],
    std::string teamColor, std::string teamDir, std::string teamDirOther,
-   unsigned int startX, unsigned int startY, unsigned int goalX, unsigned int goalY, unsigned int boardX, unsigned int boardY )
+   int startX, int startY, int boardX, int boardY )
 {
+   struct move nextMove;
    bool addToDatabase = true;
+   bool canKill = true;
+
+   //Get the specific move info
+   nextMove.piecePosition = sf::Vector2i( startX, startY );
+   nextMove.goalPosition = sf::Vector2i( boardX, boardY );
+
+   nextTeam.moves.push_back( nextMove );
+
+   //Don't wanna change original array values
+   unsigned int teamMoveTemp[BOARD_RANGE_HIGH + 1][BOARD_RANGE_HIGH + 1];
+   unsigned int teamOtherTemp[BOARD_RANGE_HIGH + 1][BOARD_RANGE_HIGH + 1];
+
+   std::copy( &teamMove[0][0], &teamMove[0][0] + (int) pow( BOARD_RANGE_HIGH + 1, 2 ), &teamMoveTemp[0][0] );
+   std::copy( &teamOther[0][0], &teamOther[0][0] + (int) pow( BOARD_RANGE_HIGH + 1, 2 ), &teamOtherTemp[0][0] );
+
+   //ACTUALLY perform the kill now
+
+   int moveX, moveY;
+
+   moveX = boardX - startX;
+   moveX = moveX / 2;
+
+   moveY = boardY - startY;
+   moveY = moveY / 2;
+
+   //Kill the piece
+   teamOtherTemp[startX + moveX][startY + moveY] = 0;
+
+   //Move the piece
+   teamMoveTemp[boardX][boardY] = teamMoveTemp[startX][startY];
+   teamMoveTemp[startX][startY] = 0;
+
+   //Check if this piece became king
+   if ( teamMoveTemp[boardX][boardY] != 2 )
+   {
+      if ( teamDir == "up" && boardY == BOARD_RANGE_LOW )
+      {
+         teamMoveTemp[boardX][boardY] = 2;
+         canKill = false;  //Cant kill after becoming king
+      }
+      else if ( teamDir == "down" && boardY == BOARD_RANGE_HIGH )
+      {
+         teamMoveTemp[boardX][boardY] = 2;
+         canKill = false;  //Cant kill after becoming king
+      }
+   }
 
    //Check for possible kills in each direction
    //Kings move in any direction
 
-   //Dont wanna change original array values
-   unsigned int teamMoveTemp[BOARD_RANGE_HIGH + 1][BOARD_RANGE_HIGH + 1];
-   unsigned int teamOtherTemp[BOARD_RANGE_HIGH + 1][BOARD_RANGE_HIGH + 1];
-
-   std::copy( &teamMove[0][0], &teamMove[0][0] + ( BOARD_RANGE_HIGH + 1 ) * ( BOARD_RANGE_HIGH + 1 ), &teamMoveTemp[0][0] );
-   std::copy( &teamOther[0][0], &teamOther[0][0] + ( BOARD_RANGE_HIGH + 1 ) * ( BOARD_RANGE_HIGH + 1 ), &teamOtherTemp[0][0] );
-
-   //Down kills
-   if ( teamMoveTemp[boardX][boardY] == 2 || teamDir == "down" )
+   if ( canKill )
    {
-      if ( inRange( boardY + 2, BOARD_RANGE_LOW, BOARD_RANGE_HIGH ) )
+      //Down kills
+      if ( teamMoveTemp[boardX][boardY] == 2 || teamDir == "down" )
       {
-         //Down right
-         if ( inRange( boardX + 2, BOARD_RANGE_LOW, BOARD_RANGE_HIGH ) )
+         if ( inRange( boardY + 2, BOARD_RANGE_LOW, BOARD_RANGE_HIGH ) )
          {
-            //Check for enemy piece
-            if ( teamOtherTemp[boardX + 1][boardY + 1] != 0 )
+            //Down right
+            if ( inRange( boardX + 2, BOARD_RANGE_LOW, BOARD_RANGE_HIGH ) )
             {
-               //Confirm the destination is clear
-               if ( teamMoveTemp[boardX + 2][boardY + 2] == 0 && teamOtherTemp[boardX + 2][boardY + 2] == 0 )
+               //Check for enemy piece
+               if ( teamOtherTemp[boardX + 1][boardY + 1] != 0 )
                {
-                  //Can kill
-                  addToDatabase = false;  //Will check for another chain kill
+                  //Confirm the destination is clear
+                  if ( teamMoveTemp[boardX + 2][boardY + 2] == 0 && teamOtherTemp[boardX + 2][boardY + 2] == 0 )
+                  {
+                     //Can kill
+                     addToDatabase = false;  //Will check for another chain kill
 
-                  //Kill the piece
-                  teamOtherTemp[boardX + 1][boardY + 1] = 0;
+                     //Check for chain kill
+                     databaseChainKill( newTeams, nextTeam, teamMoveTemp, teamOtherTemp, teamColor, teamDir, teamDirOther, boardX, boardY, boardX + 2, boardY + 2 ); 
+                  }
+               }
+            }
 
-                  //Move the piece
-                  teamMoveTemp[boardX + 2][boardY + 2] = teamMoveTemp[boardX][boardY];
-                  teamMoveTemp[boardX][boardY] = 0;
+            //Down left
+            if ( inRange( boardX - 2, BOARD_RANGE_LOW, BOARD_RANGE_HIGH ) )
+            {
+               //Check for enemy piece
+               if ( teamOtherTemp[boardX - 1][boardY + 1] != 0 )
+               {
+                  //Confirm the destination is clear
+                  if ( teamMoveTemp[boardX - 2][boardY + 2] == 0 && teamOtherTemp[boardX - 2][boardY + 2] == 0 )
+                  {
+                     //Can kill
+                     addToDatabase = false;  //Will check for another chain kill
 
-                  //Check for chain kill
-                  databaseChainKill( newTeams, teamMoveTemp, teamOtherTemp, teamColor, teamDir, teamDirOther, startX, startY, goalX, goalY, boardX + 2, boardY + 2 ); 
+                     //Check for chain kill
+                     databaseChainKill( newTeams, nextTeam, teamMoveTemp, teamOtherTemp, teamColor, teamDir, teamDirOther, boardX, boardY, boardX - 2, boardY + 2 ); 
+                  }
                }
             }
          }
+      }
 
-         //Down left
-         if ( inRange( boardX - 2, BOARD_RANGE_LOW, BOARD_RANGE_HIGH ) )
+      //Up kills
+      if ( teamMoveTemp[boardX][boardY] == 2 || teamDir == "up" )
+      {
+         if ( inRange( boardY - 2, BOARD_RANGE_LOW, BOARD_RANGE_HIGH ) )
          {
-            //Check for enemy piece
-            if ( teamOtherTemp[boardX - 1][boardY + 1] != 0 )
+            //Up right
+            if ( inRange( boardX + 2, BOARD_RANGE_LOW, BOARD_RANGE_HIGH ) )
             {
-               //Confirm the destination is clear
-               if ( teamMoveTemp[boardX - 2][boardY + 2] == 0 && teamOtherTemp[boardX - 2][boardY + 2] == 0 )
+               //Check for enemy piece
+               if ( teamOtherTemp[boardX + 1][boardY - 1] != 0 )
                {
-                  //Can kill
-                  addToDatabase = false;  //Will check for another chain kill
+                  //Confirm the destination is clear
+                  if ( teamMoveTemp[boardX + 2][boardY - 2] == 0 && teamOtherTemp[boardX + 2][boardY - 2] == 0 )
+                  {
+                     //Can kill
+                     addToDatabase = false;  //Will check for another chain kill
 
-                  //Kill the piece
-                  teamOtherTemp[boardX - 1][boardY + 1] = 0;
+                     //Check for chain kill
+                     databaseChainKill( newTeams, nextTeam, teamMoveTemp, teamOtherTemp, teamColor, teamDir, teamDirOther, boardX, boardY, boardX + 2, boardY - 2 ); 
+                  }
+               }
+            }
 
-                  //Move the piece
-                  teamMoveTemp[boardX - 2][boardY + 2] = teamMoveTemp[boardX][boardY];
-                  teamMoveTemp[boardX][boardY] = 0;
+            //Up left
+            if ( inRange( boardX - 2, BOARD_RANGE_LOW, BOARD_RANGE_HIGH ) )
+            {
+               //Check for enemy piece
+               if ( teamOtherTemp[boardX - 1][boardY - 1] != 0 )
+               {
+                  //Confirm the destination is clear
+                  if ( teamMoveTemp[boardX - 2][boardY - 2] == 0 && teamOtherTemp[boardX - 2][boardY - 2] == 0 )
+                  {
+                     //Can kill
+                     addToDatabase = false;  //Will check for another chain kill
 
-                  //Check for chain kill
-                  databaseChainKill( newTeams, teamMoveTemp, teamOtherTemp, teamColor, teamDir, teamDirOther, startX, startY, goalX, goalY, boardX - 2, boardY + 2 ); 
+                     //Check for chain kill
+                     databaseChainKill( newTeams, nextTeam, teamMoveTemp, teamOtherTemp, teamColor, teamDir, teamDirOther, boardX, boardY, boardX - 2, boardY - 2 ); 
+                  }
                }
             }
          }
       }
    }
 
-   //Up kills
-   if ( teamMoveTemp[boardX][boardY] == 2 || teamDir == "up" )
-   {
-      if ( inRange( boardY - 2, BOARD_RANGE_LOW, BOARD_RANGE_HIGH ) )
-      {
-         //Up right
-         if ( inRange( boardX + 2, BOARD_RANGE_LOW, BOARD_RANGE_HIGH ) )
-         {
-            //Check for enemy piece
-            if ( teamOtherTemp[boardX + 1][boardY - 1] != 0 )
-            {
-               //Confirm the destination is clear
-               if ( teamMoveTemp[boardX + 2][boardY - 2] == 0 && teamOtherTemp[boardX + 2][boardY - 2] == 0 )
-               {
-                  //Can kill
-                  addToDatabase = false;  //Will check for another chain kill
-
-                  //Kill the piece
-                  teamOtherTemp[boardX + 1][boardY - 1] = 0;
-
-                  //Move the piece
-                  teamMoveTemp[boardX + 2][boardY - 2] = teamMoveTemp[boardX][boardY];
-                  teamMoveTemp[boardX][boardY] = 0;
-
-                  //Check for chain kill
-                  databaseChainKill( newTeams, teamMoveTemp, teamOtherTemp, teamColor, teamDir, teamDirOther, startX, startY, goalX, goalY, boardX + 2, boardY - 2 ); 
-               }
-            }
-         }
-
-         //Up left
-         if ( inRange( boardX - 2, BOARD_RANGE_LOW, BOARD_RANGE_HIGH ) )
-         {
-            //Check for enemy piece
-            if ( teamOtherTemp[boardX - 1][boardY - 1] != 0 )
-            {
-               //Confirm the destination is clear
-               if ( teamMoveTemp[boardX - 2][boardY - 2] == 0 && teamOtherTemp[boardX - 2][boardY - 2] == 0 )
-               {
-                  //Can kill
-                  addToDatabase = false;  //Will check for another chain kill
-
-                  //Kill the piece
-                  teamOtherTemp[boardX - 1][boardY - 1] = 0;
-
-                  //Move the piece
-                  teamMoveTemp[boardX - 2][boardY - 2] = teamMoveTemp[boardX][boardY];
-                  teamMoveTemp[boardX][boardY] = 0;
-
-                  //Check for chain kill
-                  databaseChainKill( newTeams, teamMoveTemp, teamOtherTemp, teamColor, teamDir, teamDirOther, startX, startY, goalX, goalY, boardX - 2, boardY - 2 ); 
-               }
-            }
-         }
-      }
-   }
-
-   //Otherwise add to the database
+   //Add this database
    if ( addToDatabase )
    {
-      struct teamDatabase next;
-
       //Check the moving team color
       if ( teamColor == "black" )
       {
-         std::copy( &teamMove[0][0] , &teamMove[0][0]  + ( BOARD_RANGE_HIGH + 1 ) * ( BOARD_RANGE_HIGH + 1 ), &next.blackTeam[0][0]  );
-         std::copy( &teamOther[0][0] , &teamOther[0][0]  + ( BOARD_RANGE_HIGH + 1 ) * ( BOARD_RANGE_HIGH + 1 ), &next.whiteTeam[0][0]  );
+         std::copy( &teamMoveTemp[0][0], &teamMoveTemp[0][0]  + (int) pow( BOARD_RANGE_HIGH + 1, 2 ), &nextTeam.blackTeam[0][0]  );
+         std::copy( &teamOtherTemp[0][0], &teamOtherTemp[0][0]  + (int) pow( BOARD_RANGE_HIGH + 1, 2 ), &nextTeam.whiteTeam[0][0]  );
 
-         next.blackDir = teamDir;
-         next.whiteDir = teamDirOther;
+         nextTeam.blackDir = teamDir;
+         nextTeam.whiteDir = teamDirOther;
       }
       else
       {
-         std::copy( &teamMove[0][0] , &teamMove[0][0]  + ( BOARD_RANGE_HIGH + 1 ) * ( BOARD_RANGE_HIGH + 1 ), &next.whiteTeam[0][0]  );
-         std::copy( &teamOther[0][0] , &teamOther[0][0]  + ( BOARD_RANGE_HIGH + 1 ) * ( BOARD_RANGE_HIGH + 1 ), &next.blackTeam[0][0]  );
+         std::copy( &teamMoveTemp[0][0], &teamMoveTemp[0][0]  + (int) pow( BOARD_RANGE_HIGH + 1, 2 ), &nextTeam.whiteTeam[0][0]  );
+         std::copy( &teamOtherTemp[0][0], &teamOtherTemp[0][0]  + (int) pow( BOARD_RANGE_HIGH + 1, 2 ), &nextTeam.blackTeam[0][0]  );
 
-         next.whiteDir = teamDir;
-         next.blackDir = teamDirOther;
+         nextTeam.whiteDir = teamDir;
+         nextTeam.blackDir = teamDirOther;
       }
 
-      next.startMove.piecePosition = sf::Vector2i( startX, startY );
-      next.startMove.goalPosition = sf::Vector2i( goalX, goalY );
-
-      newTeams.push_back( next );
+      newTeams.push_back( nextTeam );
    }
 }
 
@@ -1363,9 +1482,9 @@ bool checkDatabaseForKills(
    int moveX[4] = { 1, 1, -1, -1 };
    int moveY[4] = { 1, -1, 1, -1 };
 
-   for ( i = 0 ; i < BOARD_RANGE_HIGH + 1 ; i++ )
+   for ( i = 0 ; i <= BOARD_RANGE_HIGH ; i++ )
    {
-      for ( j = 0 ; j < BOARD_RANGE_HIGH + 1 ; j++ )
+      for ( j = 0 ; j <= BOARD_RANGE_HIGH ; j++ )
       {
          if ( teamMove[i][j] != 0 )
          {
@@ -1375,20 +1494,22 @@ bool checkDatabaseForKills(
                //Can this piece move in this direction
                //Kings move in any direction
                if ( teamMove[i][j] == 2 || ( ( moveY[k] == 1 && teamDir == "down" ) || ( ( moveY[k] == -1 && teamDir == "up" ) ) ) )
-               //Check if this position is on the board
-               if ( inRange( i + moveX[k] * 2, BOARD_RANGE_LOW, BOARD_RANGE_HIGH ) && inRange( j + moveY[k] * 2, BOARD_RANGE_LOW, BOARD_RANGE_HIGH ) )
                {
-                  //Enemy in this direction?
-                  if ( teamOther[i + moveX[k]][j + moveY[k]] != 0 )
+                  //Check if this position is on the board
+                  if ( inBounds( i + moveX[k] * 2, j + moveY[k] * 2 ) )
                   {
-                     //End space not blocked off?
-                     if ( teamMove[i + moveX[k] * 2][j + moveY[k] * 2] == 0 && teamOther[i + moveX[k] * 2][j + moveY[k] * 2] == 0 )
+                     //Enemy in this direction?
+                     if ( teamOther[i + moveX[k]][j + moveY[k]] != 0 )
                      {
-                        //Kill move can be made
-                        return true;
+                        //End space not blocked off?
+                        if ( teamMove[i + moveX[k] * 2][j + moveY[k] * 2] == 0 && teamOther[i + moveX[k] * 2][j + moveY[k] * 2] == 0 )
+                        {
+                           //Kill move can be made
+                           return true;
+                        }
                      }
-                  }
-               } 
+                  } 
+               }
             }
          }
       }
@@ -1449,20 +1570,20 @@ bool isPositionFree( unsigned int x, unsigned int y, std::vector<stone>& black, 
    int i;
 
    //Check black pieces
-    for ( i = 0 ; i < black.size() ; i++ )  //Rows
-    {
-      if ( black.at(i).meetingPosition( x, y ) )
-         return false;
-    }
+   for ( i = 0 ; i < black.size() ; i++ )  //Rows
+   {
+   if ( black.at(i).meetingPosition( x, y ) )
+      return false;
+   }
 
-    //Check white pieces
-    for ( i = 0 ; i < white.size() ; i++ )  //Rows
-    {
-      if ( white.at(i).meetingPosition( x, y ) )
-         return false;
-    }
+   //Check white pieces
+   for ( i = 0 ; i < white.size() ; i++ )  //Rows
+   {
+   if ( white.at(i).meetingPosition( x, y ) )
+      return false;
+   }
 
-    return true;
+   return true;
 }
 
 //Desc: Returns the stone located at this position on the board
@@ -1623,7 +1744,7 @@ unsigned int confirmPosition(
    unsigned int x, unsigned int y, 
    unsigned int xChange, unsigned int yChange )
 {
-   if ( inRange( x, BOARD_RANGE_LOW, BOARD_RANGE_HIGH ) && inRange( y, BOARD_RANGE_LOW, BOARD_RANGE_HIGH ) )
+   if ( inBounds( x, y ) )
    {
          if ( isPositionFree( x, y, black, white ) )
          {
@@ -1828,6 +1949,62 @@ unsigned int getPiecesThatCanKill( std::vector<stone>& black, std::vector<stone>
    return index;
 }
 
+//Returns true if piece can move
+//Param:
+//piece - The piece to check the possible kill moves for
+//black - The array of black pieces
+//white - The array of white pieces
+bool canMove( stone piece, std::vector<stone>& black, std::vector<stone>& white )
+{
+   //Get my piece information
+   bool king;
+   std::string moveDir;
+   unsigned int boardX;
+   unsigned int boardY;
+   unsigned int x, y;
+
+   king = piece.isKing();
+   moveDir = piece.getMoveDir();
+   boardX = piece.getBoardXPos();
+   boardY = piece.getBoardYPos();
+   
+   x = piece.getBoardXPos();
+   y = piece.getBoardYPos();
+
+   //Check for possible moves
+   if ( king || moveDir == "down" )
+   {
+         //Down left
+         if ( inBounds( x - 1, y + 1 ) && isPositionFree( x - 1, y + 1, black, white ) )
+         {
+            return true;
+         }
+
+         //Down right
+         if ( inBounds( x + 1, y + 1 ) && isPositionFree( x + 1, y + 1, black, white ) )
+         {
+            return true;
+         }
+   }
+
+   if ( king || moveDir == "up" )
+   {
+         //Up left
+         if ( inBounds( x - 1, y - 1 ) && isPositionFree( x - 1, y - 1, black, white ) )
+         {
+            return true;
+         }
+
+         //Up right
+         if ( inBounds( x + 1, y - 1 ) && isPositionFree( x + 1, y - 1, black, white ) )
+         {
+            return true;
+         }
+   }
+
+   return false;
+}
+
 //Returns true if piece has kill moves
 //Param:
 //piece - The piece to check the possible kill moves for
@@ -1854,7 +2031,7 @@ bool hasKillMoves( stone piece, std::vector<stone>& black, std::vector<stone>& w
    if ( king || moveDir == "down" )
    {
          //Down left
-         if ( !isPositionFree( x - 1, y + 1, black, white ) )
+         if ( inBounds( x - 1, y + 1 ) && !isPositionFree( x - 1, y + 1, black, white ) )
          {
             //Is this piece killable?
             if ( isKillablePiece( piece, black, white, x - 1, y + 1, -1, 1 ) )
@@ -1864,7 +2041,7 @@ bool hasKillMoves( stone piece, std::vector<stone>& black, std::vector<stone>& w
          }
 
          //Down right
-         if ( !isPositionFree( x + 1, y + 1, black, white ) )
+         if ( inBounds( x + 1, y + 1 ) && !isPositionFree( x + 1, y + 1, black, white ) )
          {
             //Is this piece killable?
             if ( isKillablePiece( piece, black, white, x + 1, y + 1, 1, 1 ) )
@@ -1877,7 +2054,7 @@ bool hasKillMoves( stone piece, std::vector<stone>& black, std::vector<stone>& w
    if ( king || moveDir == "up" )
    {
          //Up left
-         if ( !isPositionFree( x - 1, y - 1, black, white ) )
+         if ( inBounds( x - 1, y - 1 ) && !isPositionFree( x - 1, y - 1, black, white ) )
          {
             //Is this piece killable?
             if ( isKillablePiece( piece, black, white, x - 1, y - 1, -1, -1 ) )
@@ -1887,7 +2064,7 @@ bool hasKillMoves( stone piece, std::vector<stone>& black, std::vector<stone>& w
          }
 
          //Up right
-         if ( !isPositionFree( x + 1, y - 1, black, white ) )
+         if ( inBounds( x + 1, y - 1 ) && !isPositionFree( x + 1, y - 1, black, white ) )
          {
             //Is this piece killable?
             if ( isKillablePiece( piece, black, white, x + 1, y - 1, 1, -1 ) )
@@ -1895,6 +2072,39 @@ bool hasKillMoves( stone piece, std::vector<stone>& black, std::vector<stone>& w
                return true;
             }
          }
+   }
+
+   return false;
+}
+
+//Returns true if the chosen team can move
+//Param:
+//teamName - "black" or "white"
+//black - The array of black pieces
+//white - The array of white pieces
+bool canTeamMove( std::string teamName, std::vector<stone>& black, std::vector<stone>& white )
+{
+   std::vector<stone>* team;
+   unsigned int i;
+
+   i = 0;
+
+   if ( teamName == "black" )
+   {
+      team = &black;
+   }
+   else
+   {
+      team = &white;
+   }
+
+   //Check all pieces for a kill move
+   for ( i = 0 ; i < team -> size() ; i++ )
+   {
+      if ( canMove( team -> at(i), black, white ) )
+      {
+         return true;
+      }
    }
 
    return false;
@@ -1961,7 +2171,7 @@ bool isKillablePiece(
 
       //Can I jump over?
       //Must be within the board range and not intruded by another piece
-      if ( inRange( x + xChange, BOARD_RANGE_LOW, BOARD_RANGE_HIGH ) && inRange( y + yChange, BOARD_RANGE_LOW, BOARD_RANGE_HIGH ) && isPositionFree( x + xChange, y + yChange, black, white ) )
+      if ( inBounds( x + xChange, y + yChange ) && isPositionFree( x + xChange, y + yChange, black, white ) )
       {
             return true;
       }

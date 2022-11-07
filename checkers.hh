@@ -34,7 +34,7 @@ const int MAX_POSSIBLE_MOVES = 4;   //Max 4 possible moves for a single checkers
 const int MAX_MOVE_POINTS = 2;  //2 possible points in 1 moves (killing a piece is 2 points)
 
 //AI
-const int MAX_DEPTH = 5;  //Max depth for minimax
+const int MAX_DEPTH = 7;  //Max depth for minimax
 
 //Files
 const std::string SND_MUSIC = "Audio\\musicDanseMacabre.ogg";
@@ -173,7 +173,7 @@ struct teamDatabase
    unsigned int whiteTeam[BOARD_RANGE_HIGH + 1][BOARD_RANGE_HIGH + 1] {0};
    std::string blackDir;
    std::string whiteDir;
-   struct move startMove;
+   std::vector<move> moves;
 };
 
 template <typename T> int sgn(T val) {
@@ -181,14 +181,15 @@ template <typename T> int sgn(T val) {
 }
 
 bool inRange( unsigned int value, unsigned int low, unsigned int high );
+bool inBounds( unsigned int x, unsigned int y );
 sf::Vector2f interpolate( sf::Vector2f pointA, sf::Vector2f pointB, float speed );
 
 int createTeam( std::vector<stone>& team, std::string teamColor, std::string teamDir, sf::Texture& texture, sf::Texture* textureKing );
 
 void getNextTurn( std::string& currentTurn, bool& canKill, std::vector<stone>& black, std::vector<stone>& white );
 
-unsigned int getAIMove( 
-   move* finalMove,
+void getAIMove( 
+   std::vector<move>* moveList,
    std::vector<stone>& black, std::vector<stone>& white,
    std::string aiTeam, std::string blackDir, std::string whiteDir );
 
@@ -215,11 +216,13 @@ void performDatabaseMove(
    int moveX, int moveY,
    bool canKill );
   
-void databaseChainKill( std::vector<teamDatabase>& newTeams, 
+void databaseChainKill( 
+   std::vector<teamDatabase>& newTeams, 
+   struct teamDatabase nextTeam,  
    unsigned int teamMove[BOARD_RANGE_HIGH + 1][BOARD_RANGE_HIGH + 1], 
    unsigned int teamOther[BOARD_RANGE_HIGH + 1][BOARD_RANGE_HIGH + 1],
    std::string teamColor, std::string teamDir, std::string teamDirOther,
-   unsigned int startX, unsigned int startY, unsigned int goalX, unsigned int goalY, unsigned int boardX, unsigned int boardY );
+   int startX, int startY, int boardX, int boardY );
 
 bool checkDatabaseForKills( 
    unsigned int teamMove[BOARD_RANGE_HIGH + 1][BOARD_RANGE_HIGH + 1], 
@@ -252,8 +255,10 @@ unsigned int getKillMoves(
 
 unsigned int getPiecesThatCanKill( std::vector<stone>& black, std::vector<stone>& white, sf::Vector2f *killSpots, std::string& currentTurn );
 
+bool canMove( stone piece, std::vector<stone>& black, std::vector<stone>& white );
 bool hasKillMoves( stone piece, std::vector<stone>& black, std::vector<stone>& white );
 
+bool canTeamMove( std::string teamName, std::vector<stone>& black, std::vector<stone>& white );
 bool canTeamKill( std::string teamName, std::vector<stone>& black, std::vector<stone>& white );
 
 bool isKillablePiece( 
