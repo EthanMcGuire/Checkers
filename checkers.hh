@@ -34,7 +34,7 @@ const int MAX_POSSIBLE_MOVES = 4;   //Max 4 possible moves for a single checkers
 const int MAX_MOVE_POINTS = 2;  //2 possible points in 1 moves (killing a piece is 2 points)
 
 //AI
-const int MAX_DEPTH = 7;  //Max depth for minimax
+const int MAX_DEPTH = 6;  //Max depth for minimax
 
 //Files
 const std::string SND_MUSIC = "Audio\\musicDanseMacabre.ogg";
@@ -154,6 +154,13 @@ enum states
    gameOver
 };
 
+//The team whose turn it is
+enum turn
+{
+   BLACK,
+   WHITE
+};
+
 struct move
 {
    sf::Vector2i piecePosition, goalPosition;
@@ -186,7 +193,7 @@ sf::Vector2f interpolate( sf::Vector2f pointA, sf::Vector2f pointB, float speed 
 
 int createTeam( std::vector<stone>& team, std::string teamColor, std::string teamDir, sf::Texture& texture, sf::Texture* textureKing );
 
-void getNextTurn( std::string& currentTurn, bool& canKill, std::vector<stone>& black, std::vector<stone>& white );
+void getNextTurn( enum turn& currentTurn, bool& canKill, std::vector<stone>& black, std::vector<stone>& white );
 
 void getAIMove( 
    std::vector<move>* moveList,
@@ -253,7 +260,7 @@ unsigned int getKillMoves(
    stone piece, std::vector<stone>& black, std::vector<stone>& white, 
    unsigned int x, unsigned int y );
 
-unsigned int getPiecesThatCanKill( std::vector<stone>& black, std::vector<stone>& white, sf::Vector2f *killSpots, std::string& currentTurn );
+unsigned int getPiecesThatCanKill( std::vector<stone>& black, std::vector<stone>& white, sf::Vector2f *killSpots, enum turn currentTurn );
 
 bool canMove( stone piece, std::vector<stone>& black, std::vector<stone>& white );
 bool hasKillMoves( stone piece, std::vector<stone>& black, std::vector<stone>& white );

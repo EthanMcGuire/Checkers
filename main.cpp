@@ -27,14 +27,18 @@ int main()
 
    //Main
    states state = getAction;
-   std::string currentTurn = "white";
-   std::string playerTeam = "white";
-   std::string aiTeam = "black";
-   std::string whiteDir = "up";
-   std::string blackDir = "down";
    std::string winner;
+   std::string teams[2], teamDir[2], teamColor[2];
+   enum turn currentTurn = WHITE;
    bool canKill = false;
    bool twoPlayer = false;
+
+   teams[BLACK] = "ai";
+   teams[WHITE] = "player";
+   teamDir[BLACK] = "down";
+   teamDir[WHITE] = "up";
+   teamColor[BLACK] = "black";
+   teamColor[WHITE] = "white";
 
    //Window
    sf::RenderWindow window;
@@ -199,10 +203,10 @@ int main()
 
    //Create the teams
    
-   if ( createTeam( black, "black", blackDir, blackStoneTexture, &blackKingTexture ) == EXIT_FAILURE )
+   if ( createTeam( black, "black", teamDir[BLACK], blackStoneTexture, &blackKingTexture ) == EXIT_FAILURE )
       return EXIT_FAILURE;
 
-   if ( createTeam( white, "white", whiteDir, whiteStoneTexture, &whiteKingTexture ) == EXIT_FAILURE )
+   if ( createTeam( white, "white", teamDir[WHITE], whiteStoneTexture, &whiteKingTexture ) == EXIT_FAILURE )
       return EXIT_FAILURE;
 
    //Start the game loop
@@ -225,8 +229,8 @@ int main()
             window.close();
          }
 
-         //Do NOT get mouse inputs, if it is not the players turn (Unless playing 2 player)
-         if ( ( playerTeam == currentTurn || twoPlayer ) && ( state == getAction || state == getChainKill ) )
+         //Do NOT get mouse inputs, if its an AIs turn
+         if ( ( teams[currentTurn] == "player" ) && ( state == getAction || state == getChainKill ) )
          {
             //Mouse moved
             if ( event.type == sf::Event::MouseMoved )
@@ -268,7 +272,7 @@ int main()
 
                      //Check for piece selection
 
-                     if ( currentTurn == "black" )
+                     if ( currentTurn == BLACK )
                      {
                         for ( i = 0 ; i < black.size() ; i++ )
                         {
@@ -321,7 +325,7 @@ int main()
 
       //Step Actions
 
-      if ( !twoPlayer && currentTurn != playerTeam && ( state == getAction || state == getChainKill ) )
+      if ( teams[currentTurn] == "ai" && ( state == getAction || state == getChainKill ) )
       {
          //AIs turn
 
@@ -337,7 +341,7 @@ int main()
          if ( aiMoveList.size() == 0 )
          {
             //Get the move list for this AIs turn
-            getAIMove( &aiMoveList, black, white, aiTeam, blackDir, whiteDir );
+            getAIMove( &aiMoveList, black, white, teamColor[currentTurn], teamDir[BLACK], teamDir[WHITE] );
          }
 
          if ( aiMoveList.size() != 0 )
@@ -463,7 +467,7 @@ int main()
                if ( selectedPiece -> isKing() == king )
                {
                   //AI doesn't need this
-                  if ( twoPlayer || currentTurn == playerTeam )
+                  if ( teams[currentTurn] == "player" )
                   {
                      //Check for kill chains
                      moveCount = getKillMoves( movePositions, movePointCount, *selectedPiece, black, white, actionPointGoalBoard.x, actionPointGoalBoard.y );
@@ -472,15 +476,11 @@ int main()
                      {
                         //Set up move information
 
-                        //AI doesn't need this
-                        if ( twoPlayer || currentTurn == playerTeam )
-                        {
-                           //Set the piece highlight on the current pieces location
-                           pieceHighlight.setPosition( selectedPiece -> getPosition() );
+                        //Set the piece highlight on the current pieces location
+                        pieceHighlight.setPosition( selectedPiece -> getPosition() );
 
-                           //Check for mouse over this new move
-                           mouseMoveIndex = checkMouseOverMove( movePositions, movePointCount, moveCount, globalMousePosWorld.x, globalMousePosWorld.y );
-                        }
+                        //Check for mouse over this new move
+                        mouseMoveIndex = checkMouseOverMove( movePositions, movePointCount, moveCount, globalMousePosWorld.x, globalMousePosWorld.y );
 
                         killChain = true;
                      }
@@ -501,7 +501,7 @@ int main()
                //Start the getChainKill state
 
                //AI moves don't get highlighted
-               if ( twoPlayer || currentTurn == playerTeam )
+               if ( teams[currentTurn] == "player" )
                {
                   selected = true;
                }
@@ -525,7 +525,7 @@ int main()
                {
                   std::string otherTeam;
 
-                  if ( currentTurn == "black" )
+                  if ( teamColor[currentTurn] == "black" )
                   {
                      otherTeam = "white";
                   }
@@ -538,7 +538,7 @@ int main()
                   if ( !canTeamKill( otherTeam, black, white ) && !canTeamMove( otherTeam, black, white ) )
                   {
                      //Game over
-                     winner = currentTurn;
+                     winner = teamColor[currentTurn];
                      winner[0] = toupper( winner[0] );
                      state = gameOver;
                   }
@@ -665,7 +665,7 @@ int main()
       else
       {
          //Only highlight for non-AI players
-         if ( twoPlayer || currentTurn == playerTeam )
+         if ( teams[currentTurn] == "player" )
          {
             if ( state == getAction )
             {
@@ -812,27 +812,32 @@ int createTeam( std::vector<stone>& team, std::string teamColor, std::string tea
 
 //Gets the next turn
 //Param:
-//currentTurn - The current color whose team it is
+//currentTurn - The current team
 //canKill - Whether a kill move can be performed
 //black - The array of black pieces
 //white - The array of white pieces
-void getNextTurn( std::string& currentTurn, bool& canKill, std::vector<stone>& black, std::vector<stone>& white )
+void getNextTurn( enum turn& currentTurn, bool& canKill, std::vector<stone>& black, std::vector<stone>& white )
 {
    int i = 0;
+   std::string name;
 
    canKill = false;
 
    //Get the next turn
-   if ( currentTurn == "black" )
+   if ( currentTurn == BLACK )
    {
-      currentTurn = "white";
+      currentTurn = WHITE;
+
+      name = "white";
    }
    else
    {
-      currentTurn = "black";
+      currentTurn = BLACK;
+
+      name = "black";
    }
 
-   canKill = canTeamKill( currentTurn, black, white );
+   canKill = canTeamKill( name, black, white );
 }
 
 //Gets the next move for the AI using the getTeamUtilityValue and min/max functions
@@ -945,8 +950,6 @@ int aiMax(
       return value;
    }
 
-   //std::cout << "MAX COUNT***: " << newTeams.size() << "\n";
-
    //Call min on the teams
    for ( i = 0 ; i < newTeams.size() ; i++ )
    {
@@ -1006,8 +1009,6 @@ int aiMin(
       return getTeamUtilityValue( &teams, aiTeam );
    }
 
-   //std::cout << "Min Count: " << newTeams.size() << "\n";
-
    //Call max on the teams
    for ( i = 0 ; i < newTeams.size() ; i++ )
    {
@@ -1024,9 +1025,18 @@ int aiMin(
 //team - Team to determine value for
 int getTeamUtilityValue( struct teamDatabase* teams, std::string team )
 {
+   //Relaxed cheating problem
+      //Assume I go 2 moves in a row
+      //If this does not result in a good position, this path can be discarded
+   //Precompute openings and endings strategies to save time
+
+   //ALways have moving foward valued?
+
    int weightPiece, weightKing;
    int value, blackValue, whiteValue;
    int black, white;
+   unsigned int blackPawns, whitePawns, blackKings, whiteKings;
+   unsigned int whiteTotal, blackTotal;
    unsigned int i, j;
 
    weightPiece = 3;
@@ -1035,40 +1045,92 @@ int getTeamUtilityValue( struct teamDatabase* teams, std::string team )
    blackValue = 0;
    whiteValue = 0;
 
+   blackPawns = 0;
+   whitePawns = 0;
+   blackKings = 0;
+   whiteKings = 0;
+
    //Get the value of for every piece on the board
-   for ( i = 0 ; i < BOARD_RANGE_HIGH + 1 ; i++ )
+   for ( i = 0 ; i <= BOARD_RANGE_HIGH ; i++ )
    {
-      for ( j = 0 ; j < BOARD_RANGE_HIGH + 1 ; j++ )
+      for ( j = 0 ; j <= BOARD_RANGE_HIGH ; j++ )
       {
          black = teams -> blackTeam[i][j];
          white = teams -> whiteTeam[i][j];
 
-         if ( black == 1 )
+         //Get the pieces value
+         if ( black != 0 )
          {
-            blackValue += weightPiece;
-         }
-         else if ( black == 2 )
-         {
-            blackValue += weightKing;
+            if ( black == 1 )
+            {
+               blackPawns++;
+
+               //Add value based on how close they are to becoming king
+               /*
+               if ( teams -> blackDir == "down" )
+               {
+                  blackValue += std::max( 0, ( int ) ( j - 2 ) );
+               }
+               else
+               {
+                  blackValue += std::max( 0, ( int ) ( 5 - j ) );
+               }
+               */
+            }
+            else if ( black == 2 )
+            {
+               blackKings++;
+            }
          }
         
-         if ( white == 1 )
+         if ( white != 0 )
          {
-            whiteValue += weightPiece;
-         }
-         else if ( white == 2 )
-         {
-            whiteValue += weightKing;
+            if ( white == 1 )
+            {
+               whitePawns++;
+
+               //Add value based on how close they are to becoming king
+               /*
+               if ( teams -> whiteDir == "down" )
+               {
+                  whiteValue += std::max( 0, ( int ) ( j - 2 ) );
+               }
+               else
+               {
+                  whiteValue += std::max( 0, ( int ) ( 5 - j ) );
+               }
+               */
+            }
+            else if ( white == 2 )
+            {
+               whiteKings++;
+            }
          }
       }
    }
 
-   //Check how far each piece is on the board
+   blackTotal = blackPawns + blackKings;
+   whiteTotal = whitePawns + whiteKings;
 
+   blackValue += ( blackPawns * weightPiece ) + ( blackKings * weightKing );
+   whiteValue += ( whitePawns * weightPiece ) + ( whiteKings * weightKing );
+
+   //Check how far each piece is on the board
 
    //Add value to the team with more pieces
       //This position is favoured for trades
       //+3
+   if ( blackTotal != whiteTotal )
+   {
+      if ( blackTotal > whiteTotal + 1 )
+      {
+         //blackValue += 3;
+      }
+      else if ( whiteTotal > blackTotal + 1 )
+      {
+         //whiteValue += 3;
+      }
+   }
 
    //Check if a team has lost (either by having no pieces or being softlocked)
       //+10 to the winning team
@@ -1083,7 +1145,7 @@ int getTeamUtilityValue( struct teamDatabase* teams, std::string team )
       value = whiteValue - blackValue;
    }
    
-   value += ( rand() % 5 ) - 2;  //Add -2, -1, 0, 1, or 2 for randomness
+   value += ( rand() % 5 ) - 2;  //Add -2 to 2 randomness
 
    return value;
 }
@@ -1310,6 +1372,9 @@ void databaseChainKill(
    struct move nextMove;
    bool addToDatabase = true;
    bool canKill = true;
+   int moveX[4] = {-1, -1, 1, 1};
+   int moveY[4] = {-1, 1, -1, 1};
+   unsigned int k;
 
    //Get the specific move info
    nextMove.piecePosition = sf::Vector2i( startX, startY );
@@ -1326,16 +1391,16 @@ void databaseChainKill(
 
    //ACTUALLY perform the kill now
 
-   int moveX, moveY;
+   int offsetX, offsetY;
 
-   moveX = boardX - startX;
-   moveX = moveX / 2;
+   offsetX = boardX - startX;
+   offsetX = offsetX / 2;
 
-   moveY = boardY - startY;
-   moveY = moveY / 2;
+   offsetY = boardY - startY;
+   offsetY = offsetY / 2;
 
    //Kill the piece
-   teamOtherTemp[startX + moveX][startY + moveY] = 0;
+   teamOtherTemp[startX + offsetX][startY + offsetY] = 0;
 
    //Move the piece
    teamMoveTemp[boardX][boardY] = teamMoveTemp[startX][startY];
@@ -1358,89 +1423,30 @@ void databaseChainKill(
 
    //Check for possible kills in each direction
    //Kings move in any direction
-
    if ( canKill )
    {
-      //Down kills
-      if ( teamMoveTemp[boardX][boardY] == 2 || teamDir == "down" )
+      for ( k = 0 ; k < 4 ; k++ )
       {
-         if ( inRange( boardY + 2, BOARD_RANGE_LOW, BOARD_RANGE_HIGH ) )
+         //Down kills
+         if ( teamMoveTemp[boardX][boardY] == 2 || ( ( moveY[k] == 1 && teamDir == "down" ) || ( moveY[k] == -1 && teamDir == "up" ) ) )
          {
-            //Down right
-            if ( inRange( boardX + 2, BOARD_RANGE_LOW, BOARD_RANGE_HIGH ) )
+            if ( inRange( boardY + moveY[k] * 2, BOARD_RANGE_LOW, BOARD_RANGE_HIGH ) )
             {
-               //Check for enemy piece
-               if ( teamOtherTemp[boardX + 1][boardY + 1] != 0 )
+               //Down right
+               if ( inRange( boardX + moveX[k] * 2, BOARD_RANGE_LOW, BOARD_RANGE_HIGH ) )
                {
-                  //Confirm the destination is clear
-                  if ( teamMoveTemp[boardX + 2][boardY + 2] == 0 && teamOtherTemp[boardX + 2][boardY + 2] == 0 )
+                  //Check for enemy piece
+                  if ( teamOtherTemp[boardX + moveX[k]][boardY + moveY[k]] != 0 )
                   {
-                     //Can kill
-                     addToDatabase = false;  //Will check for another chain kill
+                     //Confirm the destination is clear
+                     if ( teamMoveTemp[boardX + moveX[k] * 2][boardY + moveY[k] * 2] == 0 && teamOtherTemp[boardX + moveX[k] * 2][boardY + moveY[k] * 2] == 0 )
+                     {
+                        //Can kill
+                        addToDatabase = false;  //Will check for another chain kill
 
-                     //Check for chain kill
-                     databaseChainKill( newTeams, nextTeam, teamMoveTemp, teamOtherTemp, teamColor, teamDir, teamDirOther, boardX, boardY, boardX + 2, boardY + 2 ); 
-                  }
-               }
-            }
-
-            //Down left
-            if ( inRange( boardX - 2, BOARD_RANGE_LOW, BOARD_RANGE_HIGH ) )
-            {
-               //Check for enemy piece
-               if ( teamOtherTemp[boardX - 1][boardY + 1] != 0 )
-               {
-                  //Confirm the destination is clear
-                  if ( teamMoveTemp[boardX - 2][boardY + 2] == 0 && teamOtherTemp[boardX - 2][boardY + 2] == 0 )
-                  {
-                     //Can kill
-                     addToDatabase = false;  //Will check for another chain kill
-
-                     //Check for chain kill
-                     databaseChainKill( newTeams, nextTeam, teamMoveTemp, teamOtherTemp, teamColor, teamDir, teamDirOther, boardX, boardY, boardX - 2, boardY + 2 ); 
-                  }
-               }
-            }
-         }
-      }
-
-      //Up kills
-      if ( teamMoveTemp[boardX][boardY] == 2 || teamDir == "up" )
-      {
-         if ( inRange( boardY - 2, BOARD_RANGE_LOW, BOARD_RANGE_HIGH ) )
-         {
-            //Up right
-            if ( inRange( boardX + 2, BOARD_RANGE_LOW, BOARD_RANGE_HIGH ) )
-            {
-               //Check for enemy piece
-               if ( teamOtherTemp[boardX + 1][boardY - 1] != 0 )
-               {
-                  //Confirm the destination is clear
-                  if ( teamMoveTemp[boardX + 2][boardY - 2] == 0 && teamOtherTemp[boardX + 2][boardY - 2] == 0 )
-                  {
-                     //Can kill
-                     addToDatabase = false;  //Will check for another chain kill
-
-                     //Check for chain kill
-                     databaseChainKill( newTeams, nextTeam, teamMoveTemp, teamOtherTemp, teamColor, teamDir, teamDirOther, boardX, boardY, boardX + 2, boardY - 2 ); 
-                  }
-               }
-            }
-
-            //Up left
-            if ( inRange( boardX - 2, BOARD_RANGE_LOW, BOARD_RANGE_HIGH ) )
-            {
-               //Check for enemy piece
-               if ( teamOtherTemp[boardX - 1][boardY - 1] != 0 )
-               {
-                  //Confirm the destination is clear
-                  if ( teamMoveTemp[boardX - 2][boardY - 2] == 0 && teamOtherTemp[boardX - 2][boardY - 2] == 0 )
-                  {
-                     //Can kill
-                     addToDatabase = false;  //Will check for another chain kill
-
-                     //Check for chain kill
-                     databaseChainKill( newTeams, nextTeam, teamMoveTemp, teamOtherTemp, teamColor, teamDir, teamDirOther, boardX, boardY, boardX - 2, boardY - 2 ); 
+                        //Check for chain kill
+                        databaseChainKill( newTeams, nextTeam, teamMoveTemp, teamOtherTemp, teamColor, teamDir, teamDirOther, boardX, boardY, boardX + moveX[k] * 2, boardY + moveY[k] * 2 ); 
+                     }
                   }
                }
             }
@@ -1919,7 +1925,7 @@ unsigned int getKillMoves(
 //white - The array of white pieces
 //killspots - Array of positions for kills
 //currentTurn - The team whose turn it is
-unsigned int getPiecesThatCanKill( std::vector<stone>& black, std::vector<stone>& white, sf::Vector2f *killSpots, std::string& currentTurn )
+unsigned int getPiecesThatCanKill( std::vector<stone>& black, std::vector<stone>& white, sf::Vector2f *killSpots, enum turn currentTurn )
 {
    int i, index;
    std::vector<stone>* team;
@@ -1927,7 +1933,7 @@ unsigned int getPiecesThatCanKill( std::vector<stone>& black, std::vector<stone>
    i = 0;
    index = 0;
 
-   if ( currentTurn == "black" )
+   if ( currentTurn == BLACK )
    {
       team = &black;
    }
