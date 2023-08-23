@@ -34,7 +34,7 @@ int main()
    bool twoPlayer = false;
 
    teams[BLACK] = "ai";
-   teams[WHITE] = "player";
+   teams[WHITE] = "ai";
    teamDir[BLACK] = "down";
    teamDir[WHITE] = "up";
    teamColor[BLACK] = "black";
@@ -902,7 +902,7 @@ void getAIMove(
       moveList -> clear();
    }
 
-   std::cout << value << " Value\n";
+   //std::cout << value << " Value\n";
 }
 
 //Returns the max utility value for every possible move from the teams database
