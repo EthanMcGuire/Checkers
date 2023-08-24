@@ -1,7 +1,10 @@
 # Description
 
-This is a simple checkers game made using the SFML library. SFML is used for the graphics. In addition, a mini-max algorithm is used for the enemy AI. Based on the depth of the mini-max tree,
-the AI becomes more intelligient and thus more difficult to defeat.
+This is a simple checkers game made using the SFML library. SFML is used for the graphics. 
+
+In addition, a mini-max algorithm is used for the enemy AI. Based on the depth of the mini-max tree, the AI becomes more intelligient and difficult to defeat.
+
+![Screenshot of a checkers match](/Example.PNG)
 
 # How to run
 
