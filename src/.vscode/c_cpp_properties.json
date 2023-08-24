@@ -4,7 +4,7 @@
             "name": "Win32",
             "includePath": [
                 "${workspaceFolder}/**",
-                "C:/Users/Ethan Mcguire/Documents/GitHub/Checkers/SFML/SFML-2.5.1/include"
+                "C:/Users/Ethan McGuire/Desktop/VSCode/CheckersCode/Checkers/src/SFML/SFML-2.5.1/include"
             ],
             "defines": [
                 "_DEBUG",

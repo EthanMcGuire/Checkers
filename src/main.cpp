@@ -33,8 +33,9 @@ int main()
    bool canKill = false;
    bool twoPlayer = false;
 
-   teams[BLACK] = "ai";
-   teams[WHITE] = "ai";
+   //Team settings
+   teams[BLACK] = "ai";    //Team name should be "ai" or "player"
+   teams[WHITE] = "player";
    teamDir[BLACK] = "down";
    teamDir[WHITE] = "up";
    teamColor[BLACK] = "black";

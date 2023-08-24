@@ -3,7 +3,7 @@ mkfile_dir := $(dir $(mkfile_path))
 
 ROOT_DIR = $(mkfile_dir)
 
-ROOT_DIR = C:/Users/Ethan Mcguire/Documents/GitHub/Checkers/
+ROOT_DIR = C:/Users/Ethan McGuire/Desktop/VSCode/CheckersCode/Checkers/src/
 
 all: compile checkers link
 
